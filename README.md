@@ -1,73 +1,237 @@
-# Onju Voice ESPHome
+# Onju Voice German ESPHome
 
-ESPHome configuration for the original Onju Voice pcb
+Deutsche ESPHome-/Home-Assistant-Ausrichtung für die originale Onju-Voice-Platine.
+Dies ist ein echter Fork von
+[rmeissn/onju-voice-esphome](https://github.com/rmeissn/onju-voice-esphome).
+Danke an Dr. Roy Meissner und die unten genannten Projekte.
 
-Code is inspired by https://github.com/tetele/onju-voice-satellite and https://github.com/s00500/onjuconfig and https://github.com/esphome/home-assistant-voice-pe
+Die Konfiguration erhält Full-Duplex-I2S, Software-AEC, microWakeWord
+`okay_nabu`, Home Assistant Voice Assistant, Bedienung/LEDs, Timer und lokale
+Sounds. Der Audio-Stack wurde auf die aktuelle Repository-Struktur migriert
+und auf einen getesteten Commit fixiert. WLAN verwendet ausschließlich private
+ESPHome-Secrets; Improv Serial bleibt aktiv.
 
-## Experiment (my goto solution):
+**Prüfstand:** ESPHome **2026.9.1**: Konfiguration validiert, Firmware kompiliert,
+Factory-Image erzeugt und strukturell geprüft. Die öffentliche Projektkopie
+wurde zusätzlich sauber und ausschließlich mit Dummy-Secrets gebaut.
+**Die physische Onju-Hardware wurde mit diesem Stand noch nicht vollständig
+getestet.** Mikrofone, Lautsprecher, AEC, Full-Duplex und Wakeword sind damit
+nicht auf echter Hardware verifiziert. Full-Duplex ist experimentell.
 
-Use `onju_duplex_i2s` (instead of `onju_single_i2s`) as an experiment (mic and speaker active at the same time), which allows to issue commands while e.g. music is playing or a timer is ringing. From my preliminary tests, this works quite good, while the used software echo cancellation isn't as good as a dedicated chip (like in the voice pe) and triggering the wake word while music is playing might not work each and every time.
+## Voraussetzungen
 
-## Capabilities
+- Originale Onju-Voice-Platine: ESP32-S3, 16 MB Flash, octal PSRAM 80 MHz.
+- ESPHome 2026.9.1 und Internetzugriff zum Laden der Build-Abhängigkeiten.
+- Home Assistant mit ESPHome-Integration und einer deutschen Assist-Pipeline.
+- Für die spätere Erstinstallation: USB-Datenkabel, Downloadmodus der Platine,
+  esptool oder ein geeigneter ESPHome-WebSerial-Installer.
 
-The configuration supports:
+## Installation
 
-* Wake word activation & wake by action button (top button)
-* Muting (hardware switch and software switch)
-* Music playback via Music Assistant
-* Volume change via side touch buttons
-* Timers (setting, ringing, cancelling)
-* Alarm Siren mode (full volume with custom sound)
-* Dynamic capacitive button calibration (working for the revised esphome esp32_touch code)
-* Improved LED control script & proper visual feedback of states
-* Play/Pause/Stop Timer Ringing/Activate Voice Assistant via top action button
-* Soft reset via long press on the top action button
-* Tuned timings for stopping and starting the microphone - due to a hardware limitation
-* Tuned microphone characteristics (based on what ESPHome provides)
+```sh
+git clone https://github.com/marco-taylor/onju-voice-esphome.git
+cd onju-voice-esphome
+```
 
-What is currently missing (in comparison to Voice PE):
+./onju-voice.yaml und das ganze Verzeichnis onju-voice-assets/ nebeneinander in
+die eigene ESPHome-Konfiguration übernehmen. ./main.yaml und
+./onju_duplex_i2s.yaml sind alternative Einstiegspunkte auf dieselbe Variante.
+Die erhaltenen Upstream-Quellen in components/ werden hier nicht geladen.
 
-* Stop word to stop a ringing timer - hardware limitation
-* Wake word while audio output - hardware limitation
-* Visual timer "time elapsed" feedback - too few LEDs
-* Sendspin support - not stable yet
+## secrets.yaml
 
-Overall, the onju works quite well in combination with
-Music Assistant. But it's still not an Alexa or other proprietary
-product... don't expect a comparable experience, it's only similar.
+Die Platzhalter aus ./secrets.example.yaml in der eigenen privaten
+./secrets.yaml ergänzen; eine bestehende Datei nicht überschreiben:
 
-## Recommendations
+```yaml
+wifi_ssid: "YOUR_WIFI_SSID"
+wifi_password: "YOUR_WIFI_PASSWORD"
+```
 
-You can use any speech-to-text (STT) engine, conversation agent and text-to-speech (TTS) engine you like.
+Die öffentliche Konfiguration verwendet nur:
 
-My current setup, tuned for speedy responses, is:
+```yaml
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+```
 
-- STT: Mistral Voxtral via [Whisper STT Cloud API Integation](https://github.com/fabio-garavini/ha-openai-whisper-stt-api) - excels other models for European languages (other than English), is good for bad signal-noise-ratios and usually responds in less than 500ms
-- Conversation Agent: gpt-oss-120b through openrouter (pinned to Groq Cloud or Cerebras - lowest latency and highest througput) via a [Streaming capable Integration](https://github.com/skye-harris/hass_local_openai_llm). The model seems capable in calling the right functions/tools and is much cheaper than e.g. OpenAI. Switching to Groq.cloud directly might improve response speeds even more.
-- TTS: Elevenlabs - quite fast, offers a free tier, adjustable speaking speed (really a pro!), but got problems with pronunciation of dates and numbers as numerics (at least in German)
+Weitere Secrets werden nicht benötigt. API-Verschlüsselung, OTA und Fallback-AP
+sind in dieser getesteten Variante nicht aktiviert. Private Secret-Dateien,
+generierter C++-Code, Caches und Firmware gehören nicht auf GitHub. Eine mit
+echten WLAN-Daten kompilierte BIN enthält diese Daten und darf nicht als
+öffentliches Firmware-Asset verwendet werden.
 
-This whole setup is the fastest combination I've found so far (action & response speed), while not setting things up locally.
+## ESPHome-Konfiguration
 
-Beware that functionality might break with other ESPHome versions than 2026.1.
-Also, the script for the touch calibration depends heavily on the esphome implementation of esp32_touch.
+Im eigenen ESPHome-Container:
 
-## Areas to improve on
+```sh
+esphome version
+esphome config /config/onju-voice.yaml
+```
 
-This is a list of areas that would improve the Onju from a ESPHome perspective. Most of these things are currently not supported or implemented by ESPHome, but maybe someone is willing to do so.
+Oder direkt aus dem Projektordner mit einem separaten Container:
 
-1. Full duplex I2S bus together with a proper microphone downsampling algorithm
-   - We wouldn't need to start/stop the microphone anymore and also wouldn't need the custom component anymore. As music playback is favorable at 48kHz, the bus must operate at 48kHz. As mww and va require 16kHz input, the microphone component needs a downsampling approach (other than each third sample, which introduces audible artifacts)
-2. Noise Suppression & Auto Gain for the microphone
-   - The microphone on the Onju is okay, but captures a lot of noise so that the signal-to-noise ratio (SNR) isn't as good as it could be. Applying noise suppression would help here, while auto gain would help in issuing voice commands from more than 2m away without shouting. See this link: https://github.com/esphome/issues/issues/6599#issuecomment-3896756251
-3. Support for both microphones to apply Blind Source Seperation (BSS) and Multi Input Single Output (MISO) strategies
-   - when the microphone is set to stereo, the SNR goes from about 16-20db down to 1-2db, which is very very bad (must be a bug or something like that, that needs to be fixed first). BSS helps in seperating the signal (your voice) from background garbage by using two mics, while MISO selects the mic with the best SNR to proceed with. See this link: https://github.com/esphome/issues/issues/6599#issuecomment-3896756251
-4. Software based Acousting Echo Cancellation for enabling to use wake words (like "okay nabu" or "stop") while something is played on the speaker
-   - Requires 1. as a prereqisite, but might be too intensive for the processor.... software AEC might not be the holy grail in comparison to specialized hardware chips, but might be good enough to e.g. stop the timer with the "stop" wakeword. See this link: https://github.com/esphome/issues/issues/6599#issuecomment-3896756251
+```sh
+docker run --rm -v "$PWD:/config" ghcr.io/esphome/esphome:2026.9.1 config onju-voice.yaml
+```
 
-## Hardware Limitations
+Die Standardkonfiguration verwendet DHCP, keine persönliche statische IP und
+keine privaten Sound-URLs. Externe Komponenten sind commit-gepinnt.
 
-On the Onju, the microphone needs to be stopped on any audio playback and started on non-audio playback, which is a bit hacky. This is necessary as only one I2S bus for both the microphone and speaker exist, while these components need to use different I2S configurations (speaker: sending, 48kHz, microphone: receiving, 16kHz).
+## Kompilieren
 
-The applied workaround mainly implements starting and stopping the microphone at the correct position/timings, so the speaker isn't playing anything from the bus that the microphone sends to the bus (causing a weird cracking sound).
+```sh
+docker run --rm -v "$PWD:/config" ghcr.io/esphome/esphome:2026.9.1 compile onju-voice.yaml
+```
 
-The only problem remaining was that when voice_assistant was asking a followup question, it started the microphone by itself while the low_level speaker wasn't finished yet. Unfortunately it wasn't possible to make assist wait a bit longer or to wait for some condition (like speaker finished), thus I implemented (with Google Gemini) a proxy component that catches state updates from the media_player and delays their delivery to voice_assistant until the speaker is really finished. This makes voice_assistant wait a bit longer, until the media_player says "I'm ready", before voice_assistant starts the microphone. Everything else is delivered to the media_player and vice versa as it is.
+Alternativ im bestehenden eigenen ESPHome-Container:
+
+```sh
+esphome compile /config/onju-voice.yaml
+```
+
+ESPHome verwaltet ESP-IDF und Toolchain. Der erste Build lädt viele Bibliotheken
+und kann länger dauern. Andere Geräte müssen dafür nicht aktualisiert werden.
+
+## Factory-Image
+
+Maßgeblich ist der im Compile-Protokoll genannte Factory-Pfad. Beim nativen
+ESP-IDF-Build liegt er ohne abweichendes Datenverzeichnis üblicherweise unter
+.esphome/build/onju-voice/build/firmware.factory.bin; mit Datenverzeichnis `/data`
+unter /data/build/onju-voice/build/firmware.factory.bin.
+
+| Bestandteil | Flash-Offset |
+| --- | --- |
+| ESP32-S3-Bootloader | `0x0` |
+| Partitionstabelle | `0x8000` |
+| OTA-Initialisierung | `0x9000` |
+| Anwendung | `0x10000` |
+
+Diese Segmente wurden bytegenau gegen das Gesamtimage geprüft, einschließlich
+Image-Checksummen/Digests, Partitions-MD5, Grenzen und Anwendungsgröße.
+Die standardmäßigen OTA-Partitionen bleiben erhalten, obwohl kein OTA-Dienst
+aktiviert ist. Kein Dummy-Testimage und keine persönliche BIN werden verteilt.
+Jeder Benutzer erzeugt sein eigenes Factory-Image.
+
+## Erstinstallation per USB
+
+**Nur Anleitung: Bei der Vorbereitung wurde nichts geflasht.** USB-Datenkabel
+verbinden, bei Bedarf den ROM-Downloadmodus gemäß Platinenanleitung herstellen
+und den tatsächlichen seriellen Port bestimmen. Nach eigener Image-Prüfung
+mit esptool 5:
+
+```sh
+esptool --chip esp32s3 --port /dev/ttyACM0 --baud 460800 write-flash --flash-mode dio --flash-freq 80m --flash-size 16MB 0x0 .esphome/build/onju-voice/build/firmware.factory.bin
+```
+
+Port und Dateipfad sind Beispiele. Das **Gesamtimage an `0x0`** schreiben;
+`0x10000` ist nur der Offset der separaten Anwendung. Ein vollständiger Erase
+löscht auch vorhandene WLAN-/Geräteeinstellungen und ist kein normaler
+Anwendungsupdate. Danach normal starten. Ein leeres Gerät benötigt das
+Factory-Image einschließlich Bootloader und Partitionstabelle.
+
+## WLAN
+
+Lokale Secrets ermöglichen die direkte WLAN-Verbindung; IP-Adressen kommen
+per DHCP. Improv Serial über USB_SERIAL_JTAG bleibt aktiv. Über einen
+Improv-Client mit WLAN-Wechsel-Funktion können andere Daten gespeichert werden.
+Mit vorkonfigurierter SSID meldet ESPHome bereits `PROVISIONED`, auch wenn
+dieses WLAN nicht erreichbar ist. Ein reiner Erstinstallationsdialog zeigt sein
+Formular deshalb nicht zwingend automatisch.
+
+Für eine spätere Improv-Einrichtung kann lokal mit ausschließlich fiktiven
+Platzhalter-Secrets gebaut werden. Die zwei Schlüssel müssen für die YAML-
+Auflösung dennoch existieren. Gespeicherte Daten sind bei statischem WLAN an
+den Konfigurationshash gebunden; geänderte Builds können erneute Provisionierung
+erfordern. Diese Kombination wurde nicht auf Hardware getestet.
+Referenzen: [Improv Serial](https://esphome.io/components/improv_serial/),
+[WiFi](https://esphome.io/components/wifi/#user-entered-credentials).
+
+## Home Assistant
+
+Nach dem späteren Flash den Satelliten über die ESPHome-Integration hinzufügen.
+Eine deutsche Assist-Pipeline mit deutschfähigem STT, Conversation-Agent und
+TTS auswählen und dem Satelliten zuweisen. Kein bestimmter Cloud-Anbieter wird
+erzwungen. Die Native API ist im getesteten Stand unverschlüsselt; lokal
+eingeführte API-Verschlüsselung benötigt zusätzliche private Schlüssel und
+eine erneute Prüfung. Diese Vorbereitung verändert Home Assistant nicht.
+
+## Wakeword
+
+microWakeWord verwendet `okay_nabu` aus dem Release `okay_nabu_20241226.3`;
+VAD bleibt aktiv. Die Wakeword-Sprache ist von der deutschen Assist-Pipeline
+unabhängig. Sensitivitätsauswahl und Mikrofon-Gain stammen aus der Onju-
+Konfiguration. Erkennungsqualität ist nicht auf echter Hardware nachgewiesen.
+
+## Full-Duplex / AEC
+
+ESP32-S3, ESP-IDF, CPU 240 MHz, 16 MB Flash, octal PSRAM 80 MHz. LRCLK GPIO13,
+BCLK GPIO18, Mikrofon-DIN GPIO17, Lautsprecher-DOUT GPIO12. 48-kHz-Bus,
+32-bit Slots, rechter Mikrofonkanal; Verarbeitung für Mikrofon/AEC/Wakeword/
+Assist bei 16 kHz. AEC `sr_low_cost`, `filter_length: 4`, Puffer in PSRAM.
+Der Audio-Stack konvertiert intern die Raten. Mixer, Resampler, Timer, Alarm,
+Hardware-/Software-Mute, LEDs und Bedienung bleiben erhalten.
+
+Software-AEC und Wakeword während Wiedergabe müssen an der Platine geprüft
+werden. Eine erfolgreiche Kompilierung belegt keine Audioqualität.
+
+## Updates
+
+```sh
+git remote add upstream https://github.com/rmeissn/onju-voice-esphome.git
+git remote -v
+git fetch upstream
+```
+
+`origin` gehört zum eigenen Fork, `upstream` zum Original. Vor Übernahme neuer
+Stände Diff, Pins, Lizenzen und ESPHome-Version prüfen und erneut validieren/
+kompilieren. Kein automatisches Firmware-Update, Release oder Actions-Artefakt.
+Updates dieser Variante erfolgen zunächst bewusst per USB; OTA ist deaktiviert.
+Ein Upstream-PR ist erst nach gesonderter Entscheidung und Hardwaretest vorgesehen.
+
+## Fehlerbehebung
+
+- Fehlendes Secret: `wifi_ssid` und `wifi_password` lokal ergänzen.
+- Fehlende Sounds: vollständiges Asset-Verzeichnis neben die YAML kopieren.
+- Komponentenfehler: dokumentierten Commit und ESPHome 2026.9.1 verwenden;
+  AEC oder Assist nicht zur Fehlerumgehung entfernen.
+- Offline im Dashboard: ohne verbundene/geflashte Platine normal.
+- USB/Improv: Datenkabel, Port, Downloadmodus und WLAN-Wechsel-fähigen Client
+  prüfen; USB_CDC ist hier nicht der konfigurierte Improv-Transport.
+- `rgb_order` ist für eine spätere ESPHome-Version deprecated, für 2026.9.1
+  unverändert erhalten. Die PlatformIO-Optionen werden beim nativen ESP-IDF-
+  Build ignoriert; tatsächliche SDK-/Flashartefakte bestätigen DIO und 16 MB.
+
+## Abhängigkeiten
+
+[./DEPENDENCIES.md](DEPENDENCIES.md) dokumentiert Herkunft und Lizenzen.
+Aktive Komponenten: `esp_audio_stack` und `esp_aec`, Commit
+`0482d741a938378ef948e3b8f3dd31536f9f2cc9`.
+`AudioProcessor` ist intern; die alte `intercom_api` war bereits auskommentiert.
+Geprüfte Intercom-Migrationsdokumentation:
+`6581cfea712d0e13bf88c5aff3fa97b9e27123ab`.
+
+## Lizenz
+
+Die MIT-Lizenz des Upstream bleibt in [./LICENSE](LICENSE) erhalten.
+Mathematisch erzeugte lokale Signaltöne sind CC0; Hinweise stehen in
+onju-voice-assets/sounds/LICENSE.txt. Keine privaten Fremdaufnahmen übernommen.
+Lizenzen fremder Runtimes/Modelle gelten unabhängig von der Konfigurationslizenz;
+siehe ./DEPENDENCIES.md und docs/AUDIO_STACK_THIRD_PARTY_NOTICES.md.
+
+## Danksagungen
+
+Danke an Dr. Roy Meissner für
+[Onju Voice ESPHome](https://github.com/rmeissn/onju-voice-esphome),
+[tetele/onju-voice-satellite](https://github.com/tetele/onju-voice-satellite),
+[s00500/onjuconfig](https://github.com/s00500/onjuconfig),
+[Home Assistant Voice PE](https://github.com/esphome/home-assistant-voice-pe),
+die originale Onju-Voice-Hardware, ESPHome/Home Assistant, n-IA-hane für
+[Audio Stack](https://github.com/n-IA-hane/esphome-audio-stack) und
+[Intercom](https://github.com/n-IA-hane/esphome-intercom), sowie Kevin Ahrendt
+und alle microWakeWord-Mitwirkenden. Diese Arbeiten sind nicht unsere Erfindung.
+Die Original-README und ihre Attributionen bleiben unverändert unter
+docs/UPSTREAM_README.md erhalten. Ihre Erfahrungsberichte sind nicht der
+Hardware-Prüfstand dieses Forks.

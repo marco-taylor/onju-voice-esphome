@@ -1,3 +1,0 @@
-ota:
-  platform: esphome
-  password: !secret onju_ota

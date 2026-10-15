@@ -1306,3 +1306,6 @@ switch:
       - lambda: id(internal_flicker) = true;
       - lambda: id(led_state) = "idle";
       - script.execute: controle_leds
+
+ota:
+  - platform: esphome

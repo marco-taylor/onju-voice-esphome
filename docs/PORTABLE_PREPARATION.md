@@ -22,7 +22,10 @@ esphome compile /config/onju-voice.yaml
 ```
 
 Es werden keine API-, OTA- oder Fallback-AP-Secrets benötigt. Die API ist wie
-upstream unverschlüsselt; OTA und Fallback-AP sind in dieser Variante deaktiviert.
+upstream unverschlüsselt; ESPHome OTA ist ohne Passwort aktiviert, der
+Fallback-AP bleibt deaktiviert. USB-Factory-Installation und anschließende
+WLAN-OTA-Updates wurden auf echter Hardware bestätigt; Testumfang und offene
+Audio-/Assist-Prüfungen stehen in ../README.md.
 Die Secret-Datei und sämtliche generierten Build-Dateien/Firmware-Binaries
 gehören nicht ins öffentliche Repository. Die entsprechenden Ignore-Regeln
 stehen in der mitgelieferten Git-Ignore-Konfiguration. Ein lokal mit WLAN-Secrets erzeugtes Factory-Image

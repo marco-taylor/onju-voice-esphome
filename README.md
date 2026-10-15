@@ -14,9 +14,29 @@ ESPHome-Secrets; Improv Serial bleibt aktiv.
 **Prüfstand:** ESPHome **2026.9.1**: Konfiguration validiert, Firmware kompiliert,
 Factory-Image erzeugt und strukturell geprüft. Die öffentliche Projektkopie
 wurde zusätzlich sauber und ausschließlich mit Dummy-Secrets gebaut.
-**Die physische Onju-Hardware wurde mit diesem Stand noch nicht vollständig
-getestet.** Mikrofone, Lautsprecher, AEC, Full-Duplex und Wakeword sind damit
-nicht auf echter Hardware verifiziert. Full-Duplex ist experimentell.
+**Hardware-Teststand (15. Oktober 2026):** Auf einer originalen Onju-Voice-Platine
+wurden folgende Prüfungen erfolgreich durchgeführt (vom Betreiber bestätigt):
+
+| Prüfung | Ergebnis |
+| --- | --- |
+| Factory-Flash per USB | PASS |
+| Boot | PASS |
+| WLAN-Verbindung | PASS |
+| ESPHome API | PASS |
+| Erkennung im ESPHome Device Builder | PASS |
+| Erkennung/Integration in Home Assistant | PASS |
+| ESPHome OTA ohne Passwort | PASS |
+| Neustart nach OTA | PASS |
+| Erneute WLAN-/API-Verbindung nach OTA | PASS |
+
+Die Hardwaretests erfolgten mit lokal angepasstem Gerätenamen und lokaler
+WLAN-Konfiguration. Der öffentliche Standard bleibt allgemein benannt und
+verwendet DHCP.
+
+**Noch nicht praktisch verifiziert:** Mikrofonqualität, Lautsprecherqualität,
+Wake Word `okay_nabu`, vollständiger Assist-Dialog, Full-Duplex im Betrieb und
+AEC-Qualität/Barge-in. Full-Duplex bleibt experimentell.
+USB-/OTA-Erfolg belegt keine Audio- oder Assist-Qualität.
 
 ## Voraussetzungen
 
@@ -56,8 +76,17 @@ wifi:
   password: !secret wifi_password
 ```
 
-Weitere Secrets werden nicht benötigt. API-Verschlüsselung, OTA und Fallback-AP
-sind in dieser getesteten Variante nicht aktiviert. Private Secret-Dateien,
+Weitere Secrets werden nicht benötigt. ESPHome OTA ist ohne Passwort aktiviert:
+
+```yaml
+ota:
+  - platform: esphome
+```
+
+Es gibt kein OTA-Passwort und kein OTA-Secret. OTA-Updates sind aus dem
+erreichbaren Netzwerk ohne Authentifizierung möglich; diese Variante setzt ein
+vertrauenswürdiges lokales Netzwerk voraus. API-Verschlüsselung und Fallback-AP
+sind nicht aktiviert. Private Secret-Dateien,
 generierter C++-Code, Caches und Firmware gehören nicht auf GitHub. Eine mit
 echten WLAN-Daten kompilierte BIN enthält diese Daten und darf nicht als
 öffentliches Firmware-Asset verwendet werden.
@@ -79,6 +108,9 @@ docker run --rm -v "$PWD:/config" ghcr.io/esphome/esphome:2026.9.1 config onju-v
 
 Die Standardkonfiguration verwendet DHCP, keine persönliche statische IP und
 keine privaten Sound-URLs. Externe Komponenten sind commit-gepinnt.
+Gerätename und Friendly Name lassen sich lokal in den Substitutionen `name`
+und `friendly_name` anpassen. Technische Namen mit Kleinbuchstaben, Ziffern und
+Bindestrichen verwenden und für jedes Gerät eindeutig wählen.
 
 ## Kompilieren
 
@@ -111,13 +143,14 @@ unter /data/build/onju-voice/build/firmware.factory.bin.
 
 Diese Segmente wurden bytegenau gegen das Gesamtimage geprüft, einschließlich
 Image-Checksummen/Digests, Partitions-MD5, Grenzen und Anwendungsgröße.
-Die standardmäßigen OTA-Partitionen bleiben erhalten, obwohl kein OTA-Dienst
-aktiviert ist. Kein Dummy-Testimage und keine persönliche BIN werden verteilt.
+Die standardmäßigen OTA-Partitionen und der ESPHome-OTA-Dienst sind aktiviert.
+Kein Dummy-Testimage und keine persönliche BIN werden verteilt.
 Jeder Benutzer erzeugt sein eigenes Factory-Image.
 
 ## Erstinstallation per USB
 
-**Nur Anleitung: Bei der Vorbereitung wurde nichts geflasht.** USB-Datenkabel
+Die USB-Erstinstallation wurde auf echter Hardware erfolgreich getestet.
+Für die eigene Platine ein eigenes `firmware.factory.bin` erzeugen. USB-Datenkabel
 verbinden, bei Bedarf den ROM-Downloadmodus gemäß Platinenanleitung herstellen
 und den tatsächlichen seriellen Port bestimmen. Nach eigener Image-Prüfung
 mit esptool 5:
@@ -188,7 +221,14 @@ git fetch upstream
 `origin` gehört zum eigenen Fork, `upstream` zum Original. Vor Übernahme neuer
 Stände Diff, Pins, Lizenzen und ESPHome-Version prüfen und erneut validieren/
 kompilieren. Kein automatisches Firmware-Update, Release oder Actions-Artefakt.
-Updates dieser Variante erfolgen zunächst bewusst per USB; OTA ist deaktiviert.
+Die **Erstinstallation** erfolgt per USB mit dem vollständigen
+`firmware.factory.bin`. **Spätere Updates** erfolgen über ESPHome OTA per WLAN,
+beispielsweise über „Installieren“ → drahtlose Installation im Device Builder
+oder mit `esphome upload ./onju-voice.yaml`. Dabei verwendet ESPHome das
+OTA-Anwendungsimage `firmware.ota.bin`; das Factory-Gesamtimage ist für USB.
+Das Gerät muss bereits die OTA-fähige Firmware ausführen und im WLAN erreichbar
+sein. OTA benötigt in dieser Konfiguration kein Passwort. Nach einem Update
+Neustart, WLAN- und API-Verbindung prüfen.
 Ein Upstream-PR ist erst nach gesonderter Entscheidung und Hardwaretest vorgesehen.
 
 ## Fehlerbehebung

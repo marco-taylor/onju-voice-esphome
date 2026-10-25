@@ -1,0 +1,2 @@
+# Preserve the exact production source/overlay bytes, including upstream CRLF.
+onju-voice-assets/tetele-production/** -text

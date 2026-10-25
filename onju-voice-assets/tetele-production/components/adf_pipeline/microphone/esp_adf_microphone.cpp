@@ -1,0 +1,139 @@
+#include "esp_adf_microphone.h"
+
+#ifdef USE_ESP_IDF
+
+#include "esphome/core/application.h"
+#include "esphome/core/hal.h"
+#include "esphome/core/log.h"
+#include "esp_log.h"
+
+namespace esphome {
+namespace esp_adf {
+
+static const char *const TAG = "esp_adf_pipeline.microphone";
+
+void ADFMicrophone::setup() {
+  esp_log_level_set("wifi", ESP_LOG_WARN);
+}
+
+void ADFMicrophone::dump_config() {
+  esph_log_config(TAG, "ADF-Microphone");
+  ADFPipelineController::dump_config();
+}
+
+void ADFMicrophone::start() {
+  esph_log_d(TAG, "start request while ine state %d", this->state_);
+  if ( this->state_ == microphone::STATE_RUNNING){
+    return;
+  }
+  if (this->state_ == microphone::STATE_STOPPED) {
+    this->dc_prev_input_ = 0;
+    this->dc_prev_output_ = 0;
+  }
+  pipeline.start();
+  this->state_ = microphone::STATE_STARTING;
+}
+
+void ADFMicrophone::stop() {
+  this->state_ = microphone::STATE_STOPPING;
+  pipeline.stop();
+}
+
+// Adapt the legacy pull interface to ESPHome's current byte-vector callbacks.
+// PCMSink uses a zero-timeout read. Bound each loop so pipeline/other components
+// remain responsive, and provide twice the output capacity for 32-bit input.
+void ADFMicrophone::loop() {
+  ADFPipelineController::loop();
+  if (!this->is_running())
+    return;
+  for (size_t chunk = 0; chunk < 4; ++chunk) {
+    alignas(int32_t) int16_t input[512];
+    const size_t bytes_read = this->read(input, sizeof(input) / 2);
+    if (bytes_read == 0)
+      break;
+    std::vector<uint8_t> samples(bytes_read);
+    memcpy(samples.data(), input, bytes_read);
+    this->data_callbacks_.call(samples);
+  }
+}
+
+// len and return size are both in bytes
+size_t ADFMicrophone::read(int16_t *buf, size_t len) {
+    len = (len << 1) >> 1;
+    if (this->pcm_stream_.get_bits_per_sample() == 32 || this->pcm_stream_.get_bits_per_sample() == 24)
+    {
+      len = ( len << 2 ) >> 2;
+      size_t bytes_read = this->pcm_stream_.stream_read_bytes((char *) buf, len << 1  );
+      size_t samples_read = bytes_read / sizeof(int32_t);
+      if( samples_read == 0 ){
+        return 0;
+      }
+
+      std::vector<int16_t> samples;
+      uint8_t shift = 16 - this->gain_log2_ ;
+      samples.resize(samples_read);
+      for (size_t i = 0; i < samples_read; i++) {
+        const int64_t input = reinterpret_cast<int32_t *>(buf)[i];
+        const int64_t output = input - this->dc_prev_input_ + this->dc_prev_output_
+                               - (this->dc_prev_output_ >> 10);
+        this->dc_prev_input_ = input;
+        this->dc_prev_output_ = output;
+        int32_t temp = static_cast<int32_t>(output >> shift);
+         samples[i] = (int16_t) clamp<int32_t>(temp, INT16_MIN, INT16_MAX );
+      }
+      memcpy(buf, samples.data(), samples_read * sizeof(int16_t));
+      return samples_read * sizeof(int16_t);
+    }
+    size_t bytes_read = 0;
+    bytes_read =  this->pcm_stream_.stream_read_bytes((char *) buf, len);
+    if ( bytes_read && this->gain_log2_ > 0){
+      size_t samples_read = bytes_read / sizeof(int16_t);
+      std::vector<int16_t> samples;
+      samples.resize(samples_read);
+      for (size_t i = 0; i < samples_read; i++) {
+        int32_t temp = (buf)[i] << this->gain_log2_ ;
+        samples[i] = (int16_t) clamp<int32_t>(temp, INT16_MIN, INT16_MAX );
+      }
+      memcpy(buf, samples.data(), samples_read * sizeof(int16_t));
+    }
+
+    return bytes_read;
+}
+
+void ADFMicrophone::on_pipeline_state_change(PipelineState state) {
+  switch (state) {
+
+    case PipelineState::INITIALIZING:
+    case PipelineState::PREPARING:
+    case PipelineState::STARTING:
+      this->state_ = microphone::STATE_STARTING;
+      break;
+    case PipelineState::RUNNING:
+      this->state_ = microphone::STATE_RUNNING;
+      break;
+
+    case PipelineState::ABORTING:
+    case PipelineState::FINISHING:
+      this->state_ = microphone::STATE_STOPPING;
+      break;
+
+    case PipelineState::PAUSED:
+      ESP_LOGI(TAG, "pipeline paused");
+      this->state_ = microphone::STATE_STOPPED;
+      break;
+
+    case PipelineState::UNINITIALIZED:
+    case PipelineState::CREATED:
+    case PipelineState::STOPPED:
+      this->state_ = microphone::STATE_STOPPED;
+      break;
+
+    case PipelineState::PAUSING:
+    case PipelineState::DESTROYING:
+      break;
+    }
+}
+
+}  // namespace esp_adf
+}  // namespace esphome
+#endif

@@ -1,0 +1,31 @@
+{
+  "adf": "302f9a2c113d302776b896149fbcdd6d718438da",
+  "components": [
+    "audio_pipeline",
+    "audio_sal",
+    "esp-adf-libs",
+    "esp-sr",
+    "dueros_service",
+    "clouds",
+    "audio_stream",
+    "audio_board",
+    "esp_peripherals",
+    "audio_hal",
+    "display_service",
+    "esp_dispatcher",
+    "esp_actions",
+    "wifi_service",
+    "audio_recorder",
+    "tone_partition"
+  ],
+  "submodules": {
+    "esp-adf-libs": {
+      "commit": "3b34541c9212faa50c252f5fd00c36b6077ee96d",
+      "archive_sha256": "f6b39a39d2a6443637b968b1a6fd573128cbe6137e2fd84d7560f094a419c590"
+    },
+    "esp-sr": {
+      "commit": "0c1eecaac259af95f76723b61d4e16cef5904fc7",
+      "archive_sha256": "50c0220eec64a855b2a2c9a72b4eb5a5443a3673b7c0fc052cb6d451d4946514"
+    }
+  }
+}

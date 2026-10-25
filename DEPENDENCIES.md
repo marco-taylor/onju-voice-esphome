@@ -1,67 +1,55 @@
-# Abhängigkeiten, Herkunft und Lizenzen
+# Pinned dependencies and source provenance
 
-Die veröffentlichte Onju-Konfiguration basiert auf
-[rmeissn/onju-voice-esphome](https://github.com/rmeissn/onju-voice-esphome),
-Commit `09b3b65c237e8dc42c40677492965865429fe12e`. Die MIT-Lizenz und
-Copyright-Zeile von Dr. Roy Meissner bleiben in ./LICENSE erhalten.
+| Dependency | Reference | Role / terms |
+| --- | --- | --- |
+| ESPHome | 2026.10.0 | Python MIT; C++ runtime GPLv3 |
+| ESP-IDF | 5.5.6, resolved by ESPHome | Espressif toolchain / Apache-2.0 and included notices |
+| ESP-ADF | `302f9a2c113d302776b896149fbcdd6d718438da` | 16 local ADF components, upstream notices retained |
+| esp-adf-libs | `3b34541c9212faa50c252f5fd00c36b6077ee96d` | Original upstream prebuilt libraries and license terms |
+| esp-sr | `0c1eecaac259af95f76723b61d4e16cef5904fc7` | Required SDK component; upstream Espressif restrictions/notices |
+| micro-wake-word-models | `40ff33f57f8fc6ad71a75ef085abbf742495b225` | Okay Nabu, Hey Jarvis, Hey Mycroft and VAD; upstream model licenses |
+| rmeissn touch principle | `09b3b65c237e8dc42c40677492965865429fe12e` | MIT; original ./LICENSE retained |
 
-| Projekt | Verwendeter Stand | Lizenz | Zweck |
-| --- | --- | --- | --- |
-| [Onju Voice ESPHome](https://github.com/rmeissn/onju-voice-esphome) | `09b3b65c237e8dc42c40677492965865429fe12e` | MIT | Grundlage der YAML und vorhandener Quelltexte |
-| [ESPHome](https://github.com/esphome/esphome/tree/2026.9.1) | 2026.9.1 | Python/YAML: MIT; C++-Runtime: GPLv3 | Konfigurationsprüfung und Firmware-Build |
-| [ESPHome Audio Stack](https://github.com/n-IA-hane/esphome-audio-stack/tree/0482d741a938378ef948e3b8f3dd31536f9f2cc9) | `0482d741a938378ef948e3b8f3dd31536f9f2cc9` | MIT für die geladenen Komponenten | `esp_audio_stack`, `esp_aec`, interne `AudioProcessor`-Schnittstelle |
-| [ESPHome Intercom](https://github.com/n-IA-hane/esphome-intercom/tree/6581cfea712d0e13bf88c5aff3fa97b9e27123ab) | `6581cfea712d0e13bf88c5aff3fa97b9e27123ab` | MIT | Ausschließlich geprüfte Migrationsdokumentation; keine aktive Firmware-Komponente |
-| [microWakeWord](https://github.com/kahrendt/microWakeWord) | Release-Asset `okay_nabu_20241226.3` | Apache-2.0 | Wakeword `okay_nabu`; kein Modell in diesem Repository vendort |
-| [ESPHome Wakeword-Modelle](https://github.com/esphome/micro-wake-word-models) | Von ESPHome aufgelöster VAD-Katalog | Apache-2.0 | VAD-Modell; vom Build geladen, nicht vendort |
-| Lokale Signaltöne | Acht bereits erzeugte FLAC-Dateien | CC0 1.0 | Bestätigungs-, Fehler-, Timer-, Mute- und Alarmtöne |
+The Python/C++ components under
+`onju-voice-assets/tetele-production/components/` are the current production
+sources, including ESPHome API compatibility, DC correction, gain and native
+slot/handover patches. The complete Tetele component MIT notice is retained in
+`onju-voice-assets/tetele-production/LICENSE`; ESPHome-derived C++ retains its
+upstream license obligations. The root MIT license does not override the
+licenses of ESPHome, Espressif, models, audio or bundled third-party code.
 
-Die externen **Komponenten-Repositories** sind mit vollständigen Commit-Hashes
-fixiert. Der Wakeword-Download ist ein konkretes Release-Asset. ESPHomes
-impliziter VAD-Modellkatalog und IDF-Component-Manager-Pakete sind davon zu
-unterscheiden: die tatsächlich aufgelösten Modell-/Bibliotheksstände stehen
-im lokalen Build-Verzeichnis. Es wird kein vollständiger bitidentischer
-Rebuild aus beliebigen zukünftigen Paketständen zugesichert.
+The exact SDK input is recorded in
+`onju-voice-assets/tetele-production/sdk-manifest.json`: full commit URLs,
+archive SHA256 values, every selected SDK file's SHA256 and size, and source
+overlay mapping. `tools/bootstrap_sdk.py` reconstructs these inputs in the
+ignored `onju-voice-assets/tetele-production/sdk/esp-adf/` directory. Local SDK
+compatibility patches and the existing flash-stream shim/sound header are
+published under `onju-voice-assets/tetele-production/sdk-overlay/`.
+All generated SDK files must match the manifest before use.
 
-ESP-IDF 5.5.5 und Espressif-Pakete werden durch ESPHome und den IDF Component
-Manager aufgelöst. ESP-SR/ESP-DSP/esp_audio_effects können eigene Bedingungen
-und Espressif-Produktbeschränkungen haben. Diese Konfiguration richtet sich
-ausschließlich an den Espressif ESP32-S3. Die Drittanbieterhinweise des
-Audio-Stacks sind in docs/AUDIO_STACK_THIRD_PARTY_NOTICES.md erhalten.
-Der dort erwähnte GMF/AFE-Pfad wird hier nicht aktiviert; der externe
-Resampler-Adapter wird ebenfalls nicht geladen. Der native ESPHome-Resampler
-bleibt Teil der ESPHome-Runtime.
+The local wakeup sound is the official Home Assistant Voice PE
+`sounds/wake_word_triggered.flac`, pinned at commit
+`d4e6fa43d6a1a7d342b7d4d403567e06516719de`, converted offline to MP3
+without trim, gain, fade, normalization or effects and embedded in the existing
+source header. Original FLAC SHA256:
+`5c26cad33931670f2b62db5d2ed35c562b162e819ade38e646680065ad1b055f`.
+Embedded MP3 SHA256:
+`ecee971a3ebd377afab133d0baa776bb179bcee0580304ced05f75b3985ccef9`.
+Source: https://github.com/esphome/home-assistant-voice-pe/blob/d4e6fa43d6a1a7d342b7d4d403567e06516719de/sounds/wake_word_triggered.flac .
+The upstream license assigns non-runtime assets to MIT; the complete original
+notice is retained in `docs/VOICE_PE_LICENSE.txt`. The unchanged production YAML retains a historical Freesound comment on the
+flash URL; the embedded header and hashes above identify the actual asset. Error/timer sounds retain the existing
+Tetele public URLs. No replacement sound or audio processing is introduced
+for publication.
 
-Es werden ausschließlich Quellen und lokale CC0-Sounds veröffentlicht.
-Kein Firmware-Binary, kein Modell-Binary und keine fremde Runtime werden
-hier als Release verteilt. Bei einer späteren Firmware-Weiterveröffentlichung
-sind die Lizenz-/Source- und Notice-Pflichten aller tatsächlich eingebundenen
-Runtime-Pakete gesondert zu erfüllen.
+The generated IDF dependency lock is recorded in `docs/idf-dependencies.lock`.
+Its local path entries are relative to the repository; its managed package
+versions/hashes are retained. The build must still download ESPHome toolchain,
+IDF registry dependencies and pinned model assets. ESPHome pins the framework
+and SDK inputs, but no bit-identical BIN across timestamps, toolchain hosts,
+device names or credentials is promised. Never publish a credential-containing
+firmware image.
 
-## Inspiration und Danksagung aus dem Upstream
-
-- [tetele/onju-voice-satellite](https://github.com/tetele/onju-voice-satellite):
-  MIT; im Upstream als Inspirationsquelle genannt.
-- [s00500/onjuconfig](https://github.com/s00500/onjuconfig): im Upstream als
-  Inspirationsquelle genannt; im geprüften Repository keine Lizenzdatei
-  gefunden. Es werden keine Dateien direkt aus diesem Projekt übernommen
-  oder unter einer von uns behaupteten Lizenz weiterverteilt.
-- [Home Assistant Voice PE](https://github.com/esphome/home-assistant-voice-pe):
-  ESPHome-Lizenz, MIT/GPLv3 je Dateityp; im Upstream als Inspiration genannt.
-  Keine Voice-PE-Sounds oder zusätzlichen Quelldateien direkt übernommen.
-- Die originale [Onju Voice Hardware](https://github.com/justLV/onju-voice)
-  (MIT) ermöglicht das Projekt; Schaltplan-/Platinen-/CAD-Dateien sind nicht Teil
-  dieses Forks und werden nicht weiterverteilt.
-
-Die ursprüngliche README und ihre Attributionen sind in
-docs/UPSTREAM_README.md erhalten. Ihre Hardwarebeobachtungen betreffen den
-Upstream und sind **keine** Hardwarebestätigung dieses Forks.
-
-## Änderungen an der Projektstruktur
-
-Die unveränderte getestete Variante steht in ./onju-voice.yaml. ./main.yaml
-und ./onju_duplex_i2s.yaml sind kompatible Einstiegspunkte darauf. Die alten,
-hier nicht geprüften Single-I2S-/AFE-Beispiel-YAMLs und separaten WLAN-/OTA-
-Pakete wurden aus dem aktuellen Dateibaum entfernt: sie verlangten zusätzliche
-Secrets, private Sound-URLs oder ungepinnte Komponenten. Sie bleiben über
-die unveränderte Upstream-Git-Historie zugänglich. Keine Funktion der getesteten
-Full-Duplex-Variante wurde dadurch entfernt.
+The older full-duplex `esp_audio_stack` / `esp_aec` / `proxy_speaker` components
+are no longer part of the active source tree. Historical upstream sources and
+attributions remain available through Git history and `docs/UPSTREAM_README.md`.

@@ -1,9 +1,0 @@
-These original, mathematically synthesized signal tones are dedicated to the
-public domain under CC0 1.0 Universal:
-https://creativecommons.org/publicdomain/zero/1.0/
-No recordings, melodies or audio from upstream authors were used.
-Generation parameters: mono 48 kHz, 16-bit PCM, amplitude 6500/32767,
-10 ms attack/release; sine frequencies/durations: wakeup 880 Hz/0.18 s,
-error 330 Hz/0.30 s, timer 1046 Hz/0.60 s, mute 440 Hz/0.15 s,
-unmute 660 Hz/0.15 s, knock 220 Hz/0.08 s, click 1760 Hz/0.05 s,
-alarm 880 Hz/0.80 s with a periodic amplitude reduction.

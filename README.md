@@ -6,7 +6,12 @@ fork's earlier full-duplex/AEC experiment with the current Tetele ADF port.
 No rmeissn audio, microphone, I2S, AEC or media-player architecture is imported
 by the touch adaptation.
 
-Touch status: **implemented / build validated, physical hardware validation pending**.
+**BUILD VALIDATED:** ESPHome Config PASS, Codegen PASS, Clean Build PASS.
+
+**HARDWARE VALIDATION PENDING:** dynamic touch calibration, both native
+pipeline/wakeword slots, timer integration, countdown LEDs, timer alarm and
+Center-touch dismissal. These features are implemented and build validated;
+the latest changes have not been physically tested on the Onju.
 A successful build does not establish physical touch, acoustic quality or
 end-to-end Home Assistant behavior. No OTA is performed by the build commands.
 
@@ -26,6 +31,8 @@ end-to-end Home Assistant behavior. No OTA is performed by the build commands.
 - Native ADF media-player volume; no additional volume Number entity.
 - Dynamic S3 touch calibration, adapted from rmeissn commit
   `09b3b65c237e8dc42c40677492965865429fe12e` to ESPHome 2026.10.0 / IDF 5.5.6.
+- Native Voice Assistant timers: proportional LED countdown, optional **Timer LED**
+  switch (default ON), repeated local flash MP3 alarm and Center-touch dismissal.
 - No old PCM/raw capture probes or audio diagnostic buffers.
 
 The microphone source ID `mww_probe_source` is retained for compatibility; it
@@ -64,12 +71,44 @@ configuration, tokens, backups, firmware BINs or build outputs are versioned.
 `./onju-voice.yaml`; the latter filename is historical and does not enable AEC
 or a different full-duplex architecture.
 
+## Voice Assistant timers
+
+Create timers through Home Assistant Assist, for example “Set a timer for
+10 minutes”. The earliest active timer drives an orange proportional bar on
+the four top LEDs; the partial pixel dims as the remaining fraction shrinks.
+Paused, zero-length and expired entries do not drive the bar. Native timer
+updates, pause/resume and cancellation remain owned by Home Assistant.
+
+**Timer LED** defaults to ON and toggles the running countdown only. An expired
+timer still produces a red alarm animation and repeated local
+`flash://onju-timer.mp3` playback when the existing VA/player is idle. No runtime
+HTTP download, new decoder, RTTTL or Idskov audio architecture is introduced.
+The existing MP3 decoder and 16-kHz ADF output path are retained.
+
+Center touch dismisses a ringing alarm immediately; releasing that press does
+not also launch the previous Center action. Otherwise the existing Center
+behavior is unchanged. VOL−/+ and dynamic touch detection are unchanged.
+Normal media-player STOP also dismisses the alarm during silent repeat gaps;
+a new VA session or media/TTS URL takes over without a later timer stop
+interrupting that new playback. Volume changes do not dismiss the alarm.
+
+The timer waits behind existing media/TTS instead of forcibly interrupting it.
+LED priority is temporary volume feedback, Assist activity, timer alarm,
+existing media/notification visuals, countdown, then the existing idle/wakeword
+state. Cleanup releases owned timer playback and uses the existing recovery
+when no VA session has taken ownership. The original local confirmation tone,
+DC/gain, MWW models, native slots and handover/recovery logic remain unchanged.
+
+Timer behavior follows the principle from
+[Idskov/onju-voice-esphome](https://github.com/Idskov/onju-voice-esphome/tree/6b1809d780e0c741a5ef7b1b79b2ccbfc73e8f6f),
+adapted to our existing architecture. Physical validation is pending.
+
 ## Touch and later physical validation
 
 | Pin | Function |
 | --- | --- |
 | GPIO4 | VOL−, native player −0.05; hold repeats |
-| GPIO3 | Action, existing VA/player behavior |
+| GPIO3 | Dismiss timer alarm; otherwise existing VA/player behavior |
 | GPIO2 | VOL+, native player +0.05; hold repeats |
 
 Each second, calibration reads S3 smooth and benchmark data directly instead
@@ -102,7 +141,9 @@ Physical test checklist (pending):
 - Check STT, TTS/player, confirmation sound, delay and recovery after END/ERROR.
 - Check VOL−, Action, VOL+ including hold and release.
 - Read `touch_diag_snapshot` at idle and during touch; check both thresholds agree.
-- Observe at least two minutes without resets or unintended touch events.
+- Test timer start/update/pause/resume/cancel, two timers, countdown toggle,
+  local alarm repetition, Center-touch dismiss and HA STOP during sound/gaps.
+- Recheck voice/player recovery and at least two minutes of stability.
 
 ## Provenance and licenses
 

@@ -190,6 +190,6 @@ direct_dependencies:
 - improv/Improv
 - tone_partition
 - wifi_service
-manifest_hash: 901ae665bc643b3a5ad0ad2a3513c832e3e9aff16640cdcf43244f2abe9dd99d
+manifest_hash: 1cd68a96901e90a588735fcc3413034cef6b356703d2e247934e25472e6776af
 target: esp32s3
 version: 2.0.0

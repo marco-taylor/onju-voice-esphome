@@ -8,6 +8,7 @@
 | esp-adf-libs | `3b34541c9212faa50c252f5fd00c36b6077ee96d` | Original upstream prebuilt libraries and license terms |
 | esp-sr | `0c1eecaac259af95f76723b61d4e16cef5904fc7` | Required SDK component; upstream Espressif restrictions/notices |
 | micro-wake-word-models | `40ff33f57f8fc6ad71a75ef085abbf742495b225` | Okay Nabu, Hey Jarvis, Hey Mycroft and VAD; upstream model licenses |
+| Idskov timer principle | `6b1809d780e0c741a5ef7b1b79b2ccbfc73e8f6f` | Timer-only adaptation; MIT, Copyright 2026 Nico Idskov |
 | rmeissn touch principle | `09b3b65c237e8dc42c40677492965865429fe12e` | MIT; original ./LICENSE retained |
 
 The Python/C++ components under
@@ -41,6 +42,18 @@ notice is retained in `docs/VOICE_PE_LICENSE.txt`. The unchanged production YAML
 flash URL; the embedded header and hashes above identify the actual asset. Error/timer sounds retain the existing
 Tetele public URLs. No replacement sound or audio processing is introduced
 for publication.
+
+The timer principle is attributed to Idskov at the pinned commit above; the
+original notice is retained in `docs/IDSKOV_LICENSE.txt`. Only the timer
+principle is adapted, not Idskov's audio architecture or RTTTL system.
+
+The timer adapter adds a command observer before the existing native player
+control logic and a second exact local URI in the existing flash reader. It
+does not change ADF DSP, I2S settings, DC/gain, MWW, native slots or handover.
+The generated three-beep timer signal is original CC0-1.0 audio, 48-kHz mono
+128-kbit/s MP3, embedded as a source header. MP3 SHA256:
+`fa98e9d816baf8d7d9341c70fe9e5d14cd47bc16b328eeba4e3c27ab0c61aac1`.
+The existing MP3 decoder resamples through the unchanged 16-kHz ADF path.
 
 The generated IDF dependency lock is recorded in `docs/idf-dependencies.lock`.
 Its local path entries are relative to the repository; its managed package

@@ -57,6 +57,7 @@
 #endif
 
 #include "onju_wakeup_asset.h"
+#include "onju_timer_asset.h"
 
 static const char *TAG = "HTTP_STREAM";
 #define MAX_PLAYLIST_LINE_SIZE (512)
@@ -81,6 +82,8 @@ typedef struct http_stream {
     bool                            is_open;
     bool                            onju_embedded;
     size_t                          onju_position;
+    const unsigned char            *onju_data;
+    size_t                          onju_length;
     esp_http_client_handle_t        client;
     http_stream_event_handle_t      hook;
     audio_stream_type_t             stream_type;
@@ -429,18 +432,27 @@ static esp_err_t _http_open(audio_element_handle_t self)
         ESP_LOGE(TAG, "already opened");
         return ESP_OK;
     }
-    // Exact local asset only. Every other URI retains the existing HTTP path.
+    // Exact local assets only. All other URIs retain the existing HTTP path.
     const char *onju_uri = audio_element_get_uri(self);
-    http->onju_embedded = onju_uri && strcmp(onju_uri, "flash://onju-wakeup.mp3") == 0;
+    http->onju_data = NULL;
+    http->onju_length = 0;
+    if (onju_uri && strcmp(onju_uri, "flash://onju-wakeup.mp3") == 0) {
+        http->onju_data = onju_wakeup_mp3;
+        http->onju_length = sizeof(onju_wakeup_mp3);
+    } else if (onju_uri && strcmp(onju_uri, "flash://onju-timer.mp3") == 0) {
+        http->onju_data = onju_timer_mp3;
+        http->onju_length = sizeof(onju_timer_mp3);
+    }
+    http->onju_embedded = http->onju_data != NULL;
     if (http->onju_embedded) {
         audio_element_getinfo(self, &info);
-        http->onju_position = (info.byte_pos > 0 && info.byte_pos < sizeof(onju_wakeup_mp3)) ? info.byte_pos : 0;
-        info.total_bytes = sizeof(onju_wakeup_mp3);
+        http->onju_position = (info.byte_pos > 0 && info.byte_pos < http->onju_length) ? info.byte_pos : 0;
+        info.total_bytes = http->onju_length;
         audio_element_setinfo(self, &info);
         audio_element_set_codec_fmt(self, get_audio_type("audio/mpeg"));
         http->_errno = 0;
         http->is_open = true;
-        ESP_LOGI(TAG, "ONJU FLASH OPEN bytes=%u pos=%u; no HTTP client", (unsigned)sizeof(onju_wakeup_mp3), (unsigned)http->onju_position);
+        ESP_LOGI(TAG, "ONJU FLASH OPEN bytes=%u pos=%u; no HTTP client", (unsigned)http->onju_length, (unsigned)http->onju_position);
         audio_element_report_codec_fmt(self);
         return ESP_OK;
     }
@@ -678,10 +690,10 @@ static int _http_read(audio_element_handle_t self, char *buffer, int len, TickTy
 {
     http_stream_t *http = (http_stream_t *)audio_element_getdata(self);
     if (http->onju_embedded) {
-        if (len <= 0 || http->onju_position >= sizeof(onju_wakeup_mp3)) return 0;
-        size_t available = sizeof(onju_wakeup_mp3) - http->onju_position;
+        if (len <= 0 || http->onju_position >= http->onju_length) return 0;
+        size_t available = http->onju_length - http->onju_position;
         size_t take = (size_t)len < available ? (size_t)len : available;
-        memcpy(buffer, onju_wakeup_mp3 + http->onju_position, take);
+        memcpy(buffer, http->onju_data + http->onju_position, take);
         http->onju_position += take;
         audio_element_update_byte_pos(self, take);
         return (int)take;

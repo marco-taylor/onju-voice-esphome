@@ -23,6 +23,11 @@ class ADFMediaPlayer : public media_player::MediaPlayer, public ADFPipelineContr
   void dump_config() override;
   void loop() override;
 
+  // Command observation only: timer lifecycle does not alter ADF processing.
+  template<typename F> void add_on_control_callback(F &&callback) {
+    this->control_callback_.add(std::forward<F>(callback));
+  }
+
   // MediaPlayer implementations
   bool is_muted() const override { return this->muted_; }
   media_player::MediaPlayerTraits get_traits() override;
@@ -50,6 +55,8 @@ class ADFMediaPlayer : public media_player::MediaPlayer, public ADFPipelineContr
     return true;
   }
   protected:
+  LazyCallbackManager<void(const media_player::MediaPlayerCall &)> control_callback_;
+
   // MediaPlayer implementation
   void control(const media_player::MediaPlayerCall &call) override;
 

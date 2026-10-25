@@ -5,13 +5,13 @@ substitutions:
   device_description: "Onju Voice Satellite with ESPHome software and microWakeWord"
   wakeup_sound_url: "flash://onju-wakeup.mp3" # New Notification #7 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/736267/
   error_sound_url: "https://github.com/tetele/onju-voice-satellite/raw/main/res/error.mp3" # Error #8 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/734442/
-  timer_finished_sound_url: "https://github.com/tetele/onju-voice-satellite/raw/main/res/timer_finished.mp3" # New Notification #6 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/734445/
+  timer_finished_sound_url: "flash://onju-timer.mp3" # Local generated MP3; existing decoder
 
 external_components:
   - source:
       type: local
       path: onju-voice-assets/tetele-production/components
-    components: [adf_pipeline, i2s_audio, microphone, micro_wake_word, voice_assistant, esp32_touch]
+    components: [adf_pipeline, i2s_audio, microphone, micro_wake_word, voice_assistant, esp32_touch, onju_timer]
 
 esphome:
   name: "${name}"
@@ -120,6 +120,10 @@ globals:
   - id: notification
     type: bool
     restore_value: false
+  - id: timer_center_consumed
+    type: bool
+    restore_value: false
+    initial_value: "false"
 
 interval:
   - interval: 1s
@@ -258,13 +262,36 @@ micro_wake_word:
               id: onju_wakeword_recover
               reason: "handover_release_timeout"
 
+onju_timer:
+  id: onju_timers
+  voice_assistant: va
+  media_player: onju_out
+  light: top_led
+  playback_allowed: !lambda return !id(onju_wakeword_recover).is_running();
+  on_refresh:
+    - script.execute: reset_led
+  on_recover:
+    - if:
+        condition:
+          lambda: return !id(va).is_running();
+        then:
+          - script.execute:
+              id: onju_wakeword_recover
+              reason: "timer_dismiss"
+
 voice_assistant:
   id: va
   micro_wake_word: mww
   microphone: onju_microphone
   media_player: onju_out
   use_wake_word: false
+  on_start:
+    - lambda: id(onju_timers).voice_started();
+  on_idle:
+    - lambda: id(onju_timers).set_assist_phase(0);
+    - script.execute: reset_led
   on_listening:
+    - lambda: id(onju_timers).set_assist_phase(1);
     - light.turn_on:
         id: top_led
         blue: 100%
@@ -273,6 +300,7 @@ voice_assistant:
         brightness: 100%
         effect: listening
   on_stt_vad_end:
+    - lambda: id(onju_timers).set_assist_phase(2);
     - light.turn_on:
         id: top_led
         blue: 100%
@@ -281,6 +309,7 @@ voice_assistant:
         brightness: 70%
         effect: processing
   on_tts_end:
+    - lambda: id(onju_timers).set_assist_phase(3);
     - light.turn_on:
         id: top_led
         blue: 0%
@@ -298,19 +327,15 @@ voice_assistant:
         id: onju_wakeword_recover
         reason: "va_end"
   on_timer_started:
-    - light.turn_on:
-        id: top_led
-        effect: random_twinkle
+    - lambda: id(onju_timers).timers_changed();
+  on_timer_updated:
+    - lambda: id(onju_timers).timers_changed();
+  on_timer_cancelled:
+    - lambda: id(onju_timers).cancelled(timer);
   on_timer_finished:
-    - media_player.play_media: "${timer_finished_sound_url}"
-    - light.turn_on:
-        id: top_led
-        blue: 0%
-        red: 100%
-        green: 80%
-        effect: slow_pulse
-    - delay: 5s
-    - script.execute: reset_led
+    - lambda: id(onju_timers).finished(timer);
+  on_timer_tick:
+    - lambda: id(onju_timers).timers_changed();
   on_client_connected:
     - if:
         condition:
@@ -455,46 +480,56 @@ binary_sensor:
     id: action
     pin: GPIO3
     threshold: 1000
+    on_press:
+      - lambda: |-
+          id(timer_center_consumed) = id(onju_timers).alarm_active();
+          if (id(timer_center_consumed)) id(onju_timers).dismiss();
     on_click:
       - if:
           condition:
-            or:
-              - switch.is_off: use_wake_word
-              - binary_sensor.is_on: mute_switch
+            lambda: return id(timer_center_consumed) || id(onju_timers).alarm_active();
           then:
-            - logger.log:
-                tag: "action_click"
-                format: "Voice assistant is running: %s"
-                args: ['id(va).is_running() ? "yes" : "no"']
-            - if:
-                condition: media_player.is_playing
-                then:
-                  - logger.log: "LC binary_sensor/on_click/ -> media_player.stop"
-                  - media_player.stop
-            - if:
-                condition: voice_assistant.is_running
-                then:
-                  - logger.log: "LC binary_sensor/on_click/ -> voice_assistant.stop:"
-                  - voice_assistant.stop:
-                else:
-                  - logger.log: "LC binary_sensor/on_click/ -> voice_assistant.start:"
-                  - voice_assistant.start:
+            - lambda: id(onju_timers).dismiss();
           else:
-            - logger.log:
-                tag: "action_click"
-                format: "Voice assistant was running with wake word detection enabled. Starting continuously"
             - if:
-                condition: media_player.is_playing
+                condition:
+                  or:
+                    - switch.is_off: use_wake_word
+                    - binary_sensor.is_on: mute_switch
                 then:
-                  - logger.log: "LC binary_sensor/on_click/ -> media_player.stop"
-                  - media_player.stop
-            - logger.log: "LC binary_sensor/on_click/ -> voice_assistant.stop"
-            - voice_assistant.stop
-            - delay: 1s
-            - script.execute: reset_led
-            - script.wait: reset_led
-            - logger.log: "LC binary_sensor/on_click/ -> voice_assistant.start_continuous:"
-            - voice_assistant.start_continuous:
+                  - logger.log:
+                      tag: "action_click"
+                      format: "Voice assistant is running: %s"
+                      args: ['id(va).is_running() ? "yes" : "no"']
+                  - if:
+                      condition: media_player.is_playing
+                      then:
+                        - logger.log: "LC binary_sensor/on_click/ -> media_player.stop"
+                        - media_player.stop
+                  - if:
+                      condition: voice_assistant.is_running
+                      then:
+                        - logger.log: "LC binary_sensor/on_click/ -> voice_assistant.stop:"
+                        - voice_assistant.stop:
+                      else:
+                        - logger.log: "LC binary_sensor/on_click/ -> voice_assistant.start:"
+                        - voice_assistant.start:
+                else:
+                  - logger.log:
+                      tag: "action_click"
+                      format: "Voice assistant was running with wake word detection enabled. Starting continuously"
+                  - if:
+                      condition: media_player.is_playing
+                      then:
+                        - logger.log: "LC binary_sensor/on_click/ -> media_player.stop"
+                        - media_player.stop
+                  - logger.log: "LC binary_sensor/on_click/ -> voice_assistant.stop"
+                  - voice_assistant.stop
+                  - delay: 1s
+                  - script.execute: reset_led
+                  - script.wait: reset_led
+                  - logger.log: "LC binary_sensor/on_click/ -> voice_assistant.start_continuous:"
+                  - voice_assistant.start_continuous:
 
   - platform: gpio
     id: mute_switch
@@ -534,6 +569,22 @@ light:
         to: 4
     default_transition_length: 100ms
     effects:
+      # Idskov proportional-bar principle; active native timers only.
+      - addressable_lambda:
+          name: timer_countdown
+          update_interval: 200ms
+          lambda: |-
+            const float value = id(onju_timers).countdown_fraction() * it.size();
+            for (int i = 0; i < it.size(); i++) {
+              const float part = clamp(value - i, 0.0f, 1.0f);
+              it[i] = Color(uint8_t(255 * part), uint8_t(140 * part), 0);
+            }
+      - addressable_lambda:
+          name: timer_alarm
+          update_interval: 100ms
+          lambda: |-
+            const bool bright = (millis() / 300) % 2 == 0;
+            it.all() = Color(bright ? 255 : 16, 0, 0);
       - pulse:
           name: pulse
           transition_length: 250ms
@@ -657,32 +708,36 @@ script:
     then:
       - if:
           condition:
-            - lambda: return id(notification);
+            lambda: return !id(onju_timers).apply_led_priority(id(notification));
           then:
-            - light.turn_on:
-                id: top_led
-                blue: 100%
-                red: 100%
-                green: 0%
-                brightness: 100%
-                effect: slow_pulse
-          else:
             - if:
                 condition:
-                  and:
-                    - switch.is_on: use_wake_word
-                    - switch.is_on: flicker_wake_word
-                    - binary_sensor.is_off: mute_switch
+                  - lambda: return id(notification);
                 then:
                   - light.turn_on:
                       id: top_led
                       blue: 100%
                       red: 100%
                       green: 0%
-                      brightness: 60%
-                      effect: listening_ww
+                      brightness: 100%
+                      effect: slow_pulse
                 else:
-                  - light.turn_off: top_led
+                  - if:
+                      condition:
+                        and:
+                          - switch.is_on: use_wake_word
+                          - switch.is_on: flicker_wake_word
+                          - binary_sensor.is_off: mute_switch
+                      then:
+                        - light.turn_on:
+                            id: top_led
+                            blue: 100%
+                            red: 100%
+                            green: 0%
+                            brightness: 60%
+                            effect: listening_ww
+                      else:
+                        - light.turn_off: top_led
 
   - id: turn_on_notification
     then:
@@ -706,10 +761,12 @@ script:
   - id: show_volume
     mode: restart
     then:
+      - lambda: id(onju_timers).set_volume_feedback(true);
       - light.turn_on:
           id: top_led
           effect: show_volume
       - delay: 1s
+      - lambda: id(onju_timers).set_volume_feedback(false);
       - script.execute: reset_led
 
   - id: turn_on_wake_word
@@ -750,6 +807,19 @@ script:
           }
 
 switch:
+  - platform: template
+    id: timer_led
+    name: "Timer LED"
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - lambda: id(onju_timers).set_display_enabled(true);
+      - script.execute: reset_led
+    on_turn_off:
+      - lambda: id(onju_timers).set_display_enabled(false);
+      - script.execute: reset_led
+
   - platform: template
     id: wakeword_confirmation_sound
     name: "Wakeword-Bestätigungston"

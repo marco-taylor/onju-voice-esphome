@@ -1012,8 +1012,8 @@
       "member": "esp-adf-302f9a2c113d302776b896149fbcdd6d718438da/components/audio_stream/http_playlist.h"
     },
     "components/audio_stream/http_stream.c": {
-      "sha256": "763f798ed2e8e815e1fbc382a455d4a4580d7087b71d6fb139d9d7a3c1982776",
-      "bytes": 34633,
+      "sha256": "6547ac4d787bdbb75e3e3e024f12b26d1c65ddf8c4cc9490c37f8002fb285623",
+      "bytes": 35092,
       "overlay": "components/audio_stream/http_stream.c"
     },
     "components/audio_stream/i2s_stream.c": {
@@ -1170,6 +1170,11 @@
       "bytes": 6262,
       "archive": "adf",
       "member": "esp-adf-302f9a2c113d302776b896149fbcdd6d718438da/components/audio_stream/lib/hls/test/test.c"
+    },
+    "components/audio_stream/onju_timer_asset.h": {
+      "sha256": "8cc73d03e6b5773328c165ce67b6082e189287593fa08338c232ed282f4d7824",
+      "bytes": 101536,
+      "overlay": "components/audio_stream/onju_timer_asset.h"
     },
     "components/audio_stream/onju_wakeup_asset.h": {
       "sha256": "8db78f3af17972f851bc959b96f6a76998fee253778e185537ec2f72fb9f2a84",

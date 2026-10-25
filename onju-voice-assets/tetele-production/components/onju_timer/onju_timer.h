@@ -48,6 +48,7 @@ class TimerManager : public Component {
   Countdown countdown_;
   Playback playback_{Playback::WAIT_IDLE};
   uint32_t last_poll_{0}, stage_since_{0}, idle_since_{0};
+  uint32_t alarm_since_{0}, recovery_since_{0};
   uint16_t led_signature_{0xFFFF};
   uint8_t assist_phase_{0};
   bool display_enabled_{true}, volume_feedback_{false}, timers_dirty_{true};

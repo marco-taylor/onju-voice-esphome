@@ -1,19 +1,25 @@
 # Onju Voice: Tetele ADF production milestone
 
 ESPHome **2026.10.0** configuration for the original ESP32-S3 Onju Voice PCB.
-This is a **pre-hardware-test milestone**, not a stable release. It replaces this
+This is a **timer-safety development milestone**, not a stable release. It replaces this
 fork's earlier full-duplex/AEC experiment with the current Tetele ADF port.
 No rmeissn audio, microphone, I2S, AEC or media-player architecture is imported
 by the touch adaptation.
 
 **BUILD VALIDATED:** ESPHome Config PASS, Codegen PASS, Clean Build PASS.
 
-**HARDWARE VALIDATION PENDING:** dynamic touch calibration, both native
-pipeline/wakeword slots, timer integration, countdown LEDs, timer alarm and
-Center-touch dismissal. These features are implemented and build validated;
-the latest changes have not been physically tested on the Onju.
-A successful build does not establish physical touch, acoustic quality or
-end-to-end Home Assistant behavior. No OTA is performed by the build commands.
+**BOOT / HARDWARE INITIALIZATION VALIDATED:** the production Timer-Safety build
+was installed successfully. Boot without bootloop, Wi-Fi/Home Assistant API,
+8 MB PSRAM, ADF/microphone RUNNING and MWW DETECTING_WAKE_WORD were observed.
+Voice Assistant, media player, timer and GPIO4/3/2 touch initialized; both native
+pipeline/wakeword slot pairs and all three model definitions were present.
+Passive stability: **125 seconds PASS**, without critical or repeated audio errors.
+
+**FUNCTIONAL HARDWARE TESTS PENDING:** timer countdown, alarm/repetition,
+Center-touch dismissal, the real-time 15-minute timeout, recovery from a real
+stuck player, dynamic touch operation, both pipeline routes and acoustic
+recognition of all three wakewords. Initialization does not establish these
+functions or audio quality. No OTA is performed by the build commands.
 
 ## Architecture
 
@@ -99,6 +105,14 @@ state. Cleanup releases owned timer playback and uses the existing recovery
 when no VA session has taken ownership. The original local confirmation tone,
 DC/gain, MWW models, native slots and handover/recovery logic remain unchanged.
 
+A ringing session is limited to **15 minutes**, including time waiting for the
+player. Additional expired timers do not extend that session. The timeout uses
+the same central `dismiss()` cleanup as manual dismissal; a new session starts
+a fresh deadline. Cleanup waits at most **10 seconds** for player IDLE, then
+logs one WARN and continues the existing recovery if no active VA owns it.
+The existing recovery retains its own bounded waits and ownership guards.
+No persistent media-player repeat mode or additional stop wakeword is used.
+
 Timer behavior follows the principle from
 [Idskov/onju-voice-esphome](https://github.com/Idskov/onju-voice-esphome/tree/6b1809d780e0c741a5ef7b1b79b2ccbfc73e8f6f),
 adapted to our existing architecture. Physical validation is pending.
@@ -137,13 +151,15 @@ Keep `setup_mode: false` for normal use. There is no periodic diagnostic flood.
 Physical test checklist (pending):
 
 - Install only a separately approved OTA build; boot without touching the pads.
-- Check boot, Wi-Fi/API, ADF/microphone and both native wakeword/pipeline slots.
+- Boot/initialization and 125-second idle stability passed; test both native
+  wakeword/pipeline routes functionally.
 - Check STT, TTS/player, confirmation sound, delay and recovery after END/ERROR.
 - Check VOL−, Action, VOL+ including hold and release.
 - Read `touch_diag_snapshot` at idle and during touch; check both thresholds agree.
 - Test timer start/update/pause/resume/cancel, two timers, countdown toggle,
   local alarm repetition, Center-touch dismiss and HA STOP during sound/gaps.
-- Recheck voice/player recovery and at least two minutes of stability.
+- Check the 15-minute safety deadline and player-IDLE timeout under a controlled
+  fault; recheck voice/player recovery and at least two minutes of stability.
 
 ## Provenance and licenses
 

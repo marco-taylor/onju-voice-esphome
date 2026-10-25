@@ -5,6 +5,8 @@
 namespace esphome::onju_timer {
 static const char *const TAG = "onju.timer";
 static constexpr const char *ALARM_URI = "flash://onju-timer.mp3";
+static constexpr uint32_t ALARM_TIMEOUT_MS = 15 * 60 * 1000;
+static constexpr uint32_t PLAYER_IDLE_TIMEOUT_MS = 10 * 1000;
 
 void TimerManager::setup() {
   this->player_->add_on_control_callback([this](const media_player::MediaPlayerCall &call) { this->on_control_(call); });
@@ -17,6 +19,8 @@ void TimerManager::finished(const voice_assistant::Timer &timer) {
   if (std::find(this->ringing_ids_.begin(), this->ringing_ids_.end(), timer.id) == this->ringing_ids_.end())
     this->ringing_ids_.push_back(timer.id);
   if (!was_active) {
+    // One deadline for this ringing session; another expired timer cannot extend it.
+    this->alarm_since_ = millis();
     this->playback_ = Playback::WAIT_IDLE;
     this->idle_since_ = 0;
     ESP_LOGI(TAG, "Timer alarm pending; waiting for idle VA/player");
@@ -45,6 +49,7 @@ void TimerManager::dismiss(bool recover, bool stop_owned) {
   if (!this->alarm_active())
     return;
   this->ringing_ids_.clear();  // Stops future repeats before touching playback/callbacks.
+  this->alarm_since_ = 0;
   if (stop_owned)
     this->stop_owned_();
   else
@@ -52,6 +57,7 @@ void TimerManager::dismiss(bool recover, bool stop_owned) {
   this->playback_ = Playback::WAIT_IDLE;
   this->idle_since_ = 0;
   this->recover_pending_ = recover;
+  this->recovery_since_ = millis();
   ESP_LOGI(TAG, "Timer alarm dismissed");
   this->refresh_trigger_.trigger();
 }
@@ -116,6 +122,10 @@ void TimerManager::loop() {
   if (now - this->last_poll_ < 50)
     return;
   this->last_poll_ = now;
+  if (this->alarm_active() && now - this->alarm_since_ >= ALARM_TIMEOUT_MS) {
+    ESP_LOGW(TAG, "Timer alarm reached 15-minute safety timeout; dismissing");
+    this->dismiss();
+  }
   // Native event triggers run BEFORE CANCELLED/FINISHED erasure. Read only here,
   // after on_timer_event returned, not in the event's automation itself.
   if (this->timers_dirty_) {
@@ -126,8 +136,13 @@ void TimerManager::loop() {
   const bool idle = this->player_->state == media_player::MEDIA_PLAYER_STATE_IDLE;
   if (!voice)
     this->assist_phase_ = 0;
-  if (this->recover_pending_ && idle) {
+  // Dismiss callbacks may advance the clock after this loop's initial sample.
+  if (this->recover_pending_ && (idle || millis() - this->recovery_since_ >= PLAYER_IDLE_TIMEOUT_MS)) {
     this->recover_pending_ = false;
+    if (!idle) {
+      ESP_LOGW(TAG, "Timer cleanup: player not IDLE after 10 seconds; continuing existing recovery");
+      this->refresh_trigger_.trigger();
+    }
     if (!voice)
       this->recover_trigger_.trigger();
   }

@@ -1,25 +1,26 @@
-# Onju Voice: Tetele ADF production milestone
+# Onju Voice: hardware-tested dual-pipeline firmware
 
-ESPHome **2026.10.0** configuration for the original ESP32-S3 Onju Voice PCB.
-This is a **timer-safety development milestone**, not a stable release. It replaces this
-fork's earlier full-duplex/AEC experiment with the current Tetele ADF port.
-No rmeissn audio, microphone, I2S, AEC or media-player architecture is imported
-by the touch adaptation.
+ESPHome **2026.10.0** for the original ESP32-S3 Onju Voice PCB with 8 MB PSRAM.
+This **known-good development prerelease** retains the Tetele-derived ADF audio
+architecture. It does not enable AEC or the rmeissn FIR/48-kHz audio path.
 
-**BUILD VALIDATED:** ESPHome Config PASS, Codegen PASS, Clean Build PASS.
+**HARDWARE TESTED:** Okay Nabu in slot 1 and Alexa in slot 2, both models active
+together, correct pipeline routing, STT, conversation/intent, immediate TTS
+playback, media-player handover, VA recovery and return to MWW
+DETECTING_WAKE_WORD. The delayed-TTS-until-next-wakeword defect is fixed.
 
-**BOOT / HARDWARE INITIALIZATION VALIDATED:** the production Timer-Safety build
-was installed successfully. Boot without bootloop, Wi-Fi/Home Assistant API,
-8 MB PSRAM, ADF/microphone RUNNING and MWW DETECTING_WAKE_WORD were observed.
-Voice Assistant, media player, timer and GPIO4/3/2 touch initialized; both native
-pipeline/wakeword slot pairs and all three model definitions were present.
-Passive stability: **125 seconds PASS**, without critical or repeated audio errors.
+The second pipeline previously referenced a missing Home Assistant STT provider;
+correcting that HA configuration restored it without a firmware routing change.
+No personal pipeline IDs or HA configuration are distributed.
 
-**FUNCTIONAL HARDWARE TESTS PENDING:** timer countdown, alarm/repetition,
-Center-touch dismissal, the real-time 15-minute timeout, recovery from a real
-stuck player, dynamic touch operation, both pipeline routes and acoustic
-recognition of all three wakewords. Initialization does not establish these
-functions or audio quality. No OTA is performed by the build commands.
+**VALIDATION LIMITS:** this does not establish every combination of the five
+wakewords. Timer countdown/alarm/Center dismissal, physical touch operation,
+the real-time safety deadline and actual stuck-player recovery remain separate
+functional tests unless explicitly confirmed. Earlier boot/initialization and
+125-second stability checks passed.
+
+**BUILD VALIDATED:** Config, Codegen and a fresh Clean Build with ESPHome
+2026.10.0 are required for this publication; see [./docs/VALIDATION.md](./docs/VALIDATION.md).
 
 ## Architecture
 
@@ -27,11 +28,16 @@ functions or audio quality. No OTA is performed by the build commands.
 - ADF microphone and player paths at **16 kHz**, LEFT channel, 32-bit I2S data/slots.
 - Integer DC correction before runtime microphone gain and clipping.
 - Runtime microphone gain, wakeword sensitivity and existing cutoff settings.
-- Three pinned models: **Okay Nabu**, **Hey Jarvis**, **Hey Mycroft**, plus VAD.
+- Five pinned selectable models: **Okay Nabu**, **Hey Jarvis**, **Hey Mycroft**,
+  **Hey Home Assistant** (official experimental model), and **Alexa**, plus VAD.
+  Hey Home Assistant and Alexa retain their official manifest cutoffs.
 - **Two native pipeline/wakeword slots**, managed by the Home Assistant voice
-  assistant protocol. Choose distinct wakewords to address the two slots.
+  assistant protocol. Each offers no wakeword or any of the five models. Only
+  selected models are enabled: at most two different models simultaneously.
+  Identical selections enable one model; slot 1 retains routing priority.
 - MWW → VA handover waits for MWW teardown and microphone release, rechecks
-  ownership, and retains END/ERROR recovery.
+  ownership, and retains END/ERROR recovery. END recovery waits for actual
+  VA IDLE before it may stop/release consumers, preserving pending TTS START.
 - Local flash-resident wakeword confirmation sound and configurable Assist
   start delay; Wake Word Listening Light and existing LED behavior.
 - Native ADF media-player volume; no additional volume Number entity.
@@ -44,7 +50,7 @@ functions or audio quality. No OTA is performed by the build commands.
 The microphone source ID `mww_probe_source` is retained for compatibility; it
 is the functional microphone source, not an audio capture probe.
 
-## Build the milestone
+## Build the known-good source
 
 Use Python 3.12–3.14 and the pinned ESPHome 2026.10.0 environment
 for compilation. ESPHome 2026.10.0 selects ESP-IDF 5.5.6. The native ESP-IDF
@@ -103,7 +109,7 @@ LED priority is temporary volume feedback, Assist activity, timer alarm,
 existing media/notification visuals, countdown, then the existing idle/wakeword
 state. Cleanup releases owned timer playback and uses the existing recovery
 when no VA session has taken ownership. The original local confirmation tone,
-DC/gain, MWW models, native slots and handover/recovery logic remain unchanged.
+DC/gain, native slots and existing guarded handover/recovery are preserved.
 
 A ringing session is limited to **15 minutes**, including time waiting for the
 player. Additional expired timers do not extend that session. The timeout uses
@@ -152,8 +158,9 @@ Physical test checklist (pending):
 
 - Install only a separately approved OTA build; boot without touching the pads.
 - Boot/initialization and 125-second idle stability passed; test both native
-  wakeword/pipeline routes functionally.
-- Check STT, TTS/player, confirmation sound, delay and recovery after END/ERROR.
+  additional wakeword combinations as needed. The Nabu/Alexa pair passed.
+- STT, immediate TTS/player, handover and recovery passed with the Nabu/Alexa pair;
+  recheck after any future functional change.
 - Check VOL−, Action, VOL+ including hold and release.
 - Read `touch_diag_snapshot` at idle and during touch; check both thresholds agree.
 - Test timer start/update/pause/resume/cancel, two timers, countdown toggle,
@@ -170,4 +177,8 @@ The original upstream README is preserved in [./docs/UPSTREAM_README.md](./docs/
 for attribution; its old architecture and hardware claims do not describe this
 milestone. Original license notices are retained. See
 [./DEPENDENCIES.md](./DEPENDENCIES.md) for exact SDK revisions, overlays and
-third-party terms. No final/stable release or firmware binaries are published.
+third-party terms. The full USB factory image is distributed as a GitHub
+prerelease asset with SHA256, not committed to Git. No stable/v1.0 release.
+The factory image includes Improv Serial for Wi-Fi provisioning and OTA.
+Its Wi-Fi placeholders are intentionally non-personal; provision real credentials
+locally. USB installation itself has not been exercised by this publication.

@@ -7,7 +7,7 @@
 | ESP-ADF | `302f9a2c113d302776b896149fbcdd6d718438da` | 16 local ADF components, upstream notices retained |
 | esp-adf-libs | `3b34541c9212faa50c252f5fd00c36b6077ee96d` | Original upstream prebuilt libraries and license terms |
 | esp-sr | `0c1eecaac259af95f76723b61d4e16cef5904fc7` | Required SDK component; upstream Espressif restrictions/notices |
-| micro-wake-word-models | `40ff33f57f8fc6ad71a75ef085abbf742495b225` | Okay Nabu, Hey Jarvis, Hey Mycroft and VAD; upstream model licenses |
+| micro-wake-word-models | `40ff33f57f8fc6ad71a75ef085abbf742495b225` | Okay Nabu, Hey Jarvis, Hey Mycroft, experimental Hey Home Assistant, Alexa and VAD; upstream model licenses |
 | Idskov timer principle | `6b1809d780e0c741a5ef7b1b79b2ccbfc73e8f6f` | Timer-only adaptation; MIT, Copyright 2026 Nico Idskov |
 | rmeissn touch principle | `09b3b65c237e8dc42c40677492965865429fe12e` | MIT; original ./LICENSE retained |
 
@@ -39,8 +39,8 @@ Embedded MP3 SHA256:
 Source: https://github.com/esphome/home-assistant-voice-pe/blob/d4e6fa43d6a1a7d342b7d4d403567e06516719de/sounds/wake_word_triggered.flac .
 The upstream license assigns non-runtime assets to MIT; the complete original
 notice is retained in `docs/VOICE_PE_LICENSE.txt`. The unchanged production YAML retains a historical Freesound comment on the
-flash URL; the embedded header and hashes above identify the actual asset. Error/timer sounds retain the existing
-Tetele public URLs. No replacement sound or audio processing is introduced
+flash URL; the embedded header and hashes above identify the actual asset. The error sound retains its existing Tetele public URL; the timer sound is
+local flash audio as described below. No replacement sound or audio processing is introduced
 for publication.
 
 The timer principle is attributed to Idskov at the pinned commit above; the

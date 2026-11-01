@@ -214,6 +214,12 @@ micro_wake_word:
       id: hey_jarvis
     - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/hey_mycroft.json
       id: hey_mycroft
+    # Official experimental model; retain manifest cutoff/window/arena defaults.
+    - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/experiments/hey_home_assistant.json
+      id: hey_home_assistant
+    # Official stable v2 model; retain manifest cutoff/window/arena defaults.
+    - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/alexa.json
+      id: alexa
   vad:
     model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/vad.json
   on_wake_word_detected:
@@ -317,6 +323,12 @@ voice_assistant:
         green: 100%
         effect: speaking
   on_end:
+    # HA run-end can arrive before deferred local TTS playback starts.
+    # Let VA finish its response before recovery is allowed to call VA.stop.
+    - wait_until:
+        condition:
+          not:
+            voice_assistant.is_running:
     - wait_until:
         condition:
           not:

@@ -1104,10 +1104,14 @@ void VoiceAssistant::on_set_configuration(const std::vector<std::string> &active
     }
 
     // Enable only active wake words
+    size_t enabled_count = 0;
     for (const auto &ww_id : active_wake_words) {
+      if (enabled_count >= 2)
+        break;
       for (auto &model : this->micro_wake_word_->get_wake_words()) {
-        if (model->get_id() == ww_id) {
+        if (model->get_id() == ww_id && !model->is_enabled()) {
           model->enable();
+          enabled_count++;
           ESP_LOGD(TAG, "Enabled wake word: %s (id=%s)", model->get_wake_word().c_str(), model->get_id().c_str());
         }
       }

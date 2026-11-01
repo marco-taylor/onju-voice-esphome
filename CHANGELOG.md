@@ -1,5 +1,24 @@
 # Changelog
 
+## Known good dual pipeline — 2026-11-01
+
+- Hardware-tested Okay Nabu/slot 1 and Alexa/slot 2 concurrently: correct routing,
+  STT, conversation, immediate TTS, player handover and VA/MWW recovery.
+- Preserve the known-good fix: END recovery waits for actual VA IDLE. This
+  prevents STOP from overwriting a pending media-player START.
+- Five selectable models: Okay Nabu, Hey Jarvis, Hey Mycroft, experimental
+  Hey Home Assistant and stable Alexa; at most two distinct active models.
+  Duplicate selections enable one model and keep slot-1 routing priority.
+- Retain 16-kHz/32-bit LEFT Tetele ADF, DC correction, runtime gain, timer
+  safety (15-minute alarm limit, central dismiss, 10-second player-IDLE wait),
+  dynamic touch, native volume, local sounds and configurable Assist delay.
+- Pipeline-2 missing-STT failure was HA configuration, not a firmware defect.
+- Public source uses a generic identity, DHCP and secret references. ESPHome
+  2026.10.0 Config, Codegen and fresh Clean Build validate the publication.
+- Publish a full USB factory image as a prerelease asset. No OTA during release.
+- Not every wakeword combination is hardware tested. Timer/touch operation and
+  real safety fault/time-limit cases are not newly claimed as physically tested.
+
 ## Timer safety — 2026-10-25
 
 - Limit a ringing session to 15 minutes using the existing central `dismiss()`

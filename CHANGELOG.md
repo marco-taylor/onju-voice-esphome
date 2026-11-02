@@ -1,5 +1,17 @@
 # Changelog
 
+## Known good + Software Mute — 2026-11-02
+
+- Hardware-tested native microphone mute/unmute; Mute is a Home Assistant
+  configuration entity. Solid red indication in the existing LED state machine.
+- No wakeword starts Assist while muted. Reliable recovery after unmute,
+  including Okay Nabu and Alexa/pipeline 2; repeated switching tested.
+- Media player and timers remain functional while muted. Boot default Mute OFF.
+- Preserve dual pipelines, VA-IDLE/TTS fix, ADF/DC/gain, five models, VAD,
+  cutoffs, sensitivity, touch, timer safety and sounds.
+- ESPHome 2026.10.0; generic full USB factory image, Improv Serial and OTA.
+- New prerelease; historical tags, releases and factory assets unchanged.
+
 ## Known good release — 2026-11-02
 
 - Hardware-tested dual HA pipelines with Okay Nabu and Alexa active together:

@@ -22,6 +22,25 @@ ESPHome 2026.10.0; see [./docs/VALIDATION.md](./docs/VALIDATION.md).
 The Tetele-derived ADF architecture is retained. No AEC, rmeissn FIR or
 48-kHz microphone path is enabled.
 
+## Software Mute — hardware tested
+
+Home Assistant exposes **Mute** under the device's **Configuration** entities
+(`entity_category: config`). Native `microphone.mute` / `microphone.unmute`
+silence microphone PCM delivered to consumers. Wakewords cannot start Assist
+while muted. The existing LED state machine shows solid red. Unmute restores
+normal microWakeWord operation without changing either wakeword/pipeline slot.
+Mute starts **OFF** after reboot. No mute sounds added.
+
+Hardware tested: actual microphone silence, no wakeword response while muted,
+repeated mute/unmute, Okay Nabu and Alexa/pipeline 2 after unmute, red indication,
+and media player and timer operation while muted. This is software muting of
+microphone data, not an electrical microphone disconnect.
+
+Sensitivity definitions, VAD, models and the existing nonpersistent sensitivity
+selector are unchanged. Its boot default remains **Moderately sensitive**;
+a user-selected runtime sensitivity is not embedded into the generic factory
+image. This release does not change the running device's selected sensitivity.
+
 ## Architecture
 
 - Local Tetele-derived ADF components and all 16 required ADF SDK components.

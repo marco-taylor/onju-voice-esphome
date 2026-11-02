@@ -51,6 +51,7 @@ class MicroWakeWord final : public Component
   void stop();
 
   bool is_running() const { return this->state_ != State::STOPPED; }
+  bool is_detecting_wake_word() const { return this->state_ == State::DETECTING_WAKE_WORD; }
 
   void set_features_step_size(uint8_t step_size) { this->features_step_size_ = step_size; }
 

@@ -223,50 +223,59 @@ micro_wake_word:
   vad:
     model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/vad.json
   on_wake_word_detected:
-    - lambda: |-
-        id(onju_handover_with_tone) = id(wakeword_confirmation_sound).state;
-    - if:
-        condition: media_player.is_playing
-        then:
-          - media_player.pause
-    # Wait for the actual MWW task teardown AND physical microphone STOPPED.
-    - wait_until:
-        condition:
-          lambda: return !id(mww).is_running() && id(onju_microphone).is_stopped();
-        timeout: 10s
     - if:
         condition:
-          lambda: return !id(mww).is_running() && id(onju_microphone).is_stopped() && !id(va).is_running() && id(use_wake_word).state && !id(mute_switch).state;
+          lambda: return !id(onju_microphone).get_mute_state();
         then:
-          - logger.log: "HANDOVER MWW stopped; physical microphone STOPPED; release confirmed"
+          - lambda: |-
+              id(onju_handover_with_tone) = id(wakeword_confirmation_sound).state;
+          - if:
+              condition: media_player.is_playing
+              then:
+                - media_player.pause
+          # Wait for the actual MWW task teardown AND physical microphone STOPPED.
+          - wait_until:
+              condition:
+                lambda: return !id(mww).is_running() && id(onju_microphone).is_stopped();
+              timeout: 10s
           - if:
               condition:
-                lambda: return id(onju_handover_with_tone);
+                lambda: return !id(mww).is_running() && id(onju_microphone).is_stopped() && !id(va).is_running() && id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state();
               then:
-                - logger.log: "HANDOVER release confirmed -> local tone and configured delay"
-                - media_player.play_media: "${wakeup_sound_url}"
-                - delay: !lambda return static_cast<uint32_t>(id(assist_start_delay_setting).state);
-          - if:
-              condition:
-                lambda: return !id(va).is_running() && !id(mww).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state;
-              then:
-                - logger.log: "HANDOVER released; optional configured delay elapsed -> VA START"
-                - voice_assistant.start:
-                    wake_word: !lambda return wake_word;
+                - logger.log: "HANDOVER MWW stopped; physical microphone STOPPED; release confirmed"
+                - if:
+                    condition:
+                      lambda: return id(onju_handover_with_tone);
+                    then:
+                      - logger.log: "HANDOVER release confirmed -> local tone and configured delay"
+                      - media_player.play_media: "${wakeup_sound_url}"
+                      - delay: !lambda return static_cast<uint32_t>(id(assist_start_delay_setting).state);
+                - if:
+                    condition:
+                      lambda: return !id(va).is_running() && !id(mww).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state();
+                    then:
+                      - logger.log: "HANDOVER released; optional configured delay elapsed -> VA START"
+                      - voice_assistant.start:
+                          wake_word: !lambda return wake_word;
+                    else:
+                      - logger.log:
+                          level: ERROR
+                          format: "HANDOVER ownership/permission changed; VA start aborted"
+                      - script.execute:
+                          id: onju_wakeword_recover
+                          reason: "handover_final_guard"
               else:
                 - logger.log:
                     level: ERROR
-                    format: "HANDOVER ownership/permission changed; VA start aborted"
+                    format: "HANDOVER microphone release timeout or permission changed; VA start aborted"
                 - script.execute:
                     id: onju_wakeword_recover
-                    reason: "handover_final_guard"
+                    reason: "handover_release_timeout"
+
         else:
           - logger.log:
-              level: ERROR
-              format: "HANDOVER microphone release timeout or permission changed; VA start aborted"
-          - script.execute:
-              id: onju_wakeword_recover
-              reason: "handover_release_timeout"
+              level: DEBUG
+              format: "MUTE: wakeword ignored; microphone muted"
 
 onju_timer:
   id: onju_timers
@@ -298,30 +307,48 @@ voice_assistant:
     - script.execute: reset_led
   on_listening:
     - lambda: id(onju_timers).set_assist_phase(1);
-    - light.turn_on:
-        id: top_led
-        blue: 100%
-        red: 100%
-        green: 100%
-        brightness: 100%
-        effect: listening
+    - if:
+        condition:
+          lambda: return id(onju_microphone).get_mute_state();
+        then:
+          - script.execute: reset_led
+        else:
+          - light.turn_on:
+              id: top_led
+              blue: 100%
+              red: 100%
+              green: 100%
+              brightness: 100%
+              effect: listening
   on_stt_vad_end:
     - lambda: id(onju_timers).set_assist_phase(2);
-    - light.turn_on:
-        id: top_led
-        blue: 100%
-        red: 0%
-        green: 20%
-        brightness: 70%
-        effect: processing
+    - if:
+        condition:
+          lambda: return id(onju_microphone).get_mute_state();
+        then:
+          - script.execute: reset_led
+        else:
+          - light.turn_on:
+              id: top_led
+              blue: 100%
+              red: 0%
+              green: 20%
+              brightness: 70%
+              effect: processing
   on_tts_end:
     - lambda: id(onju_timers).set_assist_phase(3);
-    - light.turn_on:
-        id: top_led
-        blue: 0%
-        red: 20%
-        green: 100%
-        effect: speaking
+    - if:
+        condition:
+          lambda: return id(onju_microphone).get_mute_state();
+        then:
+          - script.execute: reset_led
+        else:
+          - light.turn_on:
+              id: top_led
+              blue: 0%
+              red: 20%
+              green: 100%
+              effect: speaking
   on_end:
     # HA run-end can arrive before deferred local TTS playback starts.
     # Let VA finish its response before recovery is allowed to call VA.stop.
@@ -646,6 +673,21 @@ light:
     default_transition_length: 100ms
 
 script:
+  - id: onju_unmute_listen
+    mode: restart
+    then:
+      - wait_until:
+          condition:
+            lambda: return !id(va).is_running() && !id(onju_wakeword_recover).is_running() && !id(mww).get_wake_word_detected_trigger()->is_action_running() && ((id(mww).is_detecting_wake_word() && id(onju_microphone).is_running()) || (!id(mww).is_running() && id(onju_microphone).is_stopped()));
+          timeout: 5s
+      - if:
+          condition:
+            lambda: return !id(onju_microphone).get_mute_state() && !id(va).is_running() && !id(onju_wakeword_recover).is_running() && !id(mww).get_wake_word_detected_trigger()->is_action_running() && !id(mww).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state;
+          then:
+            - logger.log: "MUTE: unmute consumers released -> MWW START"
+            - micro_wake_word.start:
+      - script.execute: reset_led
+
   # One bounded handover/END/ERROR cleanup; never starts a second VA.
   - id: onju_wakeword_recover
     mode: single
@@ -720,36 +762,48 @@ script:
     then:
       - if:
           condition:
-            lambda: return !id(onju_timers).apply_led_priority(id(notification));
+            lambda: return id(onju_microphone).get_mute_state();
           then:
+            - light.turn_on:
+                id: top_led
+                effect: none
+                red: 100%
+                green: 0%
+                blue: 0%
+                brightness: 60%
+          else:
             - if:
                 condition:
-                  - lambda: return id(notification);
+                  lambda: return !id(onju_timers).apply_led_priority(id(notification));
                 then:
-                  - light.turn_on:
-                      id: top_led
-                      blue: 100%
-                      red: 100%
-                      green: 0%
-                      brightness: 100%
-                      effect: slow_pulse
-                else:
                   - if:
                       condition:
-                        and:
-                          - switch.is_on: use_wake_word
-                          - switch.is_on: flicker_wake_word
-                          - binary_sensor.is_off: mute_switch
+                        - lambda: return id(notification);
                       then:
                         - light.turn_on:
                             id: top_led
                             blue: 100%
                             red: 100%
                             green: 0%
-                            brightness: 60%
-                            effect: listening_ww
+                            brightness: 100%
+                            effect: slow_pulse
                       else:
-                        - light.turn_off: top_led
+                        - if:
+                            condition:
+                              and:
+                                - switch.is_on: use_wake_word
+                                - switch.is_on: flicker_wake_word
+                                - binary_sensor.is_off: mute_switch
+                            then:
+                              - light.turn_on:
+                                  id: top_led
+                                  blue: 100%
+                                  red: 100%
+                                  green: 0%
+                                  brightness: 60%
+                                  effect: listening_ww
+                            else:
+                              - light.turn_off: top_led
 
   - id: turn_on_notification
     then:
@@ -773,13 +827,20 @@ script:
   - id: show_volume
     mode: restart
     then:
-      - lambda: id(onju_timers).set_volume_feedback(true);
-      - light.turn_on:
-          id: top_led
-          effect: show_volume
-      - delay: 1s
-      - lambda: id(onju_timers).set_volume_feedback(false);
-      - script.execute: reset_led
+      - if:
+          condition:
+            lambda: return !id(onju_microphone).get_mute_state();
+          then:
+            - lambda: id(onju_timers).set_volume_feedback(true);
+            - light.turn_on:
+                id: top_led
+                effect: show_volume
+            - delay: 1s
+            - lambda: id(onju_timers).set_volume_feedback(false);
+            - script.execute: reset_led
+
+          else:
+            - script.execute: reset_led
 
   - id: turn_on_wake_word
     then:
@@ -819,6 +880,32 @@ script:
           }
 
 switch:
+  - platform: template
+    id: software_mute
+    name: Mute
+    entity_category: config
+    icon: mdi:microphone-off
+    restore_mode: ALWAYS_OFF
+    lambda: return id(onju_microphone).get_mute_state();
+    turn_on_action:
+      - microphone.mute: onju_microphone
+      - script.stop: onju_unmute_listen
+      - lambda: id(mww).get_wake_word_detected_trigger()->stop_action();
+      - script.stop: show_volume
+      - lambda: id(onju_timers).set_volume_feedback(false);
+      - script.execute: reset_led
+      - lambda: |-
+          ESP_LOGI("onju.mute", "Mute ON: microphone muted=%s; MWW detecting=%s; playback untouched", id(onju_microphone).get_mute_state() ? "YES" : "NO", id(mww).is_detecting_wake_word() ? "YES" : "NO");
+    turn_off_action:
+      - if:
+          condition:
+            microphone.is_muted: onju_microphone
+          then:
+            - microphone.unmute: onju_microphone
+            - script.execute: reset_led
+            - script.execute: onju_unmute_listen
+            - logger.log: "MUTE: Mute OFF; microphone unmuted; normal recovery retained"
+
   - platform: template
     id: timer_led
     name: "Timer LED"

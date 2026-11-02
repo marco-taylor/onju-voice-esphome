@@ -1,8 +1,14 @@
-# Known-good release validation — 2026-11-02
+# Known-good software-mute release validation — 2026-11-02
 
 ESPHome **2026.10.0**, ESP-IDF **5.5.6**. Public-source checks:
 **Config PASS, Codegen PASS, fresh Clean Build PASS**. The factory image comes
 from that same build; each segment is compared byte-for-byte with its build input.
+
+The user additionally confirmed physical software mute/unmute, microphone silence,
+no wakeword response while muted, red LED, repeated switching, reliable MWW
+recovery, Okay Nabu/Alexa after unmute and media player/timer while muted.
+Native API and HA registry confirm Mute is a configuration entity.
+Mute logic and category match the hardware-tested source exactly.
 
 The user confirmed real-device Okay Nabu/slot 1 + Alexa/slot 2, STT, intent,
 immediate TTS, VA-IDLE race fix, player handover, VA/MWW recovery, dynamic touch,
@@ -25,3 +31,6 @@ Public dummy Wi-Fi/identity/DHCP/build metadata differ from the installed privat
 image, so byte identity between public and private firmware is not claimed.
 Factory application bytes must match the validated public application exactly.
 No production changes, OTA, HA settings changes or other-device changes occur.
+
+Sensitivity definitions and the boot default are unchanged. The existing
+nonpersistent runtime sensitivity is not made a new firmware default.

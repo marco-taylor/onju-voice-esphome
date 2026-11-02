@@ -72,6 +72,7 @@ class MicrophoneSource final {
   void start();
   void stop();
   bool is_passive() const { return this->passive_; }
+  bool is_muted() const { return this->mic_->get_mute_state(); }
   bool is_running() const { return (this->mic_->is_running() && (this->enabled_ || this->passive_)); }
   bool is_stopped() const { return !this->is_running(); };
 

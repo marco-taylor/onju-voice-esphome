@@ -304,6 +304,10 @@ void VoiceAssistant::loop() {
   }
   switch (this->state_) {
     case State::IDLE: {
+      if (this->mic_source_->is_muted()) {
+        this->continuous_ = false;
+        this->continue_conversation_ = false;
+      }
       if (this->continuous_ && this->desired_state_ == State::IDLE) {
         this->idle_trigger_.trigger();
         this->set_state_(State::START_MICROPHONE, State::START_PIPELINE);
@@ -313,6 +317,12 @@ void VoiceAssistant::loop() {
       break;
     }
     case State::START_MICROPHONE: {
+      if (this->mic_source_->is_muted()) {
+        this->continuous_ = false;
+        this->continue_conversation_ = false;
+        this->set_state_(State::IDLE, State::IDLE);
+        break;
+      }
       ESP_LOGD(TAG, "Starting Microphone");
       if (!this->allocate_buffers_()) {
         this->status_set_error(LOG_STR("Failed to allocate buffers"));
@@ -337,6 +347,12 @@ void VoiceAssistant::loop() {
       break;
     }
     case State::START_PIPELINE: {
+      if (this->mic_source_->is_muted()) {
+        this->continuous_ = false;
+        this->continue_conversation_ = false;
+        this->set_state_(State::STOP_MICROPHONE, State::IDLE);
+        break;
+      }
       ESP_LOGD(TAG, "Requesting start");
       uint32_t flags = 0;
       if (!this->continue_conversation_ && this->use_wake_word_)
@@ -518,7 +534,7 @@ void VoiceAssistant::loop() {
         this->tts_stream_end_trigger_.trigger();
       }
 #endif
-      if (this->continue_conversation_) {
+      if (this->continue_conversation_ && !this->mic_source_->is_muted()) {
         this->set_state_(State::START_MICROPHONE, State::START_PIPELINE);
       } else {
         this->set_state_(State::IDLE, State::IDLE);
@@ -681,6 +697,10 @@ void VoiceAssistant::start_streaming(struct sockaddr_storage *addr, uint16_t por
 }
 
 void VoiceAssistant::request_start(bool continuous, bool silence_detection) {
+  if (this->mic_source_->is_muted()) {
+    ESP_LOGD(TAG, "VA start ignored: microphone muted");
+    return;
+  }
   if (this->api_client_ == nullptr) {
     ESP_LOGE(TAG, "No API client connected");
     this->set_state_(State::IDLE, State::IDLE);

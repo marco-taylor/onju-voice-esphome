@@ -1,5 +1,22 @@
 # Changelog
 
+## Known good release — 2026-11-02
+
+- Hardware-tested dual HA pipelines with Okay Nabu and Alexa active together:
+  STT, intent, immediate TTS, media-player handover and VA/MWW recovery.
+- Preserve the delayed-TTS race fix: END recovery waits for actual VA IDLE,
+  preventing STOP from overwriting a pending player START.
+- Hardware-tested dynamic touch, timer/Center dismissal, MWW after timer, and
+  official Voice-PE wake/timer sounds. All active sounds are local.
+- Five selectable models, two native slots, at most two distinct enabled models.
+  Other model pairs are available, not all individually hardware tested.
+- Retain ADF/DC/gain, 16-kHz/32-bit LEFT mic, VAD/cutoffs, timer safety (15-minute
+  ringing limit, central dismiss, 10-second player-IDLE cleanup) and LED logic.
+- Correct Voice-PE CC-BY-4.0 sound attribution and preserve exact sound bytes.
+- Generic public Config/Codegen/Clean Build with ESPHome 2026.10.0; full USB
+  factory image from the same build, Improv Serial and OTA support.
+- Prerelease only; historical tags/releases preserved. No OTA during publication.
+
 ## Known good dual pipeline — 2026-11-01
 
 - Hardware-tested Okay Nabu/slot 1 and Alexa/slot 2 concurrently: correct routing,

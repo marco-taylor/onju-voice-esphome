@@ -3,9 +3,9 @@ substitutions:
   friendly_name: "Onju Voice"
   project_version: "1.1.0"
   device_description: "Onju Voice Satellite with ESPHome software and microWakeWord"
-  wakeup_sound_url: "flash://onju-wakeup.mp3" # New Notification #7 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/736267/
-  error_sound_url: "https://github.com/tetele/onju-voice-satellite/raw/main/res/error.mp3" # Error #8 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/734442/
-  timer_finished_sound_url: "flash://onju-timer.mp3" # Local generated MP3; existing decoder
+  wakeup_sound_url: "flash://onju-wakeup.mp3" # Existing official Voice PE wake tone; unchanged bytes
+  error_sound_url: "flash://onju-error.mp3" # Existing Tetele error tone, now embedded without audio changes
+  timer_finished_sound_url: "flash://onju-timer.mp3" # Voice PE timer_finished, locally converted to MP3
 
 external_components:
   - source:

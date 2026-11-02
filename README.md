@@ -1,26 +1,26 @@
-# Onju Voice: hardware-tested dual-pipeline firmware
+# Onju Voice ESPHome — Known Good 2026-11
 
-ESPHome **2026.10.0** for the original ESP32-S3 Onju Voice PCB with 8 MB PSRAM.
-This **known-good development prerelease** retains the Tetele-derived ADF audio
-architecture. It does not enable AEC or the rmeissn FIR/48-kHz audio path.
+Hardware-tested firmware for the original ESP32-S3 Onju Voice PCB with 8 MB
+PSRAM, built with **ESPHome 2026.10.0 / ESP-IDF 5.5.6**. Distributed as a
+**development prerelease**, not v1.0/stable.
 
-**HARDWARE TESTED:** Okay Nabu in slot 1 and Alexa in slot 2, both models active
-together, correct pipeline routing, STT, conversation/intent, immediate TTS
-playback, media-player handover, VA recovery and return to MWW
-DETECTING_WAKE_WORD. The delayed-TTS-until-next-wakeword defect is fixed.
+**HARDWARE TESTED:** Okay Nabu / slot 1 and Alexa / slot 2 concurrently; correct
+dual-pipeline routing, STT, conversation/intent, immediate TTS, media-player
+handover, VA-IDLE END recovery and MWW DETECTING_WAKE_WORD. Dynamic touch,
+timers, Center-touch timer dismissal, MWW after timer, and the local Voice-PE
+wake and new timer sounds were also confirmed on the real device.
 
-The second pipeline previously referenced a missing Home Assistant STT provider;
-correcting that HA configuration restored it without a firmware routing change.
-No personal pipeline IDs or HA configuration are distributed.
+**AVAILABLE:** five selectable wakewords and two native slots. This does not
+claim that every possible model pair was individually hardware tested. The
+15-minute timer safety limit and 10-second player-IDLE fault recovery are
+implemented/build validated; dedicated real-time/fault-injection tests are not
+newly claimed by this milestone.
 
-**VALIDATION LIMITS:** this does not establish every combination of the five
-wakewords. Timer countdown/alarm/Center dismissal, physical touch operation,
-the real-time safety deadline and actual stuck-player recovery remain separate
-functional tests unless explicitly confirmed. Earlier boot/initialization and
-125-second stability checks passed.
+**BUILD VALIDATED:** Config PASS, Codegen PASS, fresh Clean Build PASS with
+ESPHome 2026.10.0; see [./docs/VALIDATION.md](./docs/VALIDATION.md).
 
-**BUILD VALIDATED:** Config, Codegen and a fresh Clean Build with ESPHome
-2026.10.0 are required for this publication; see [./docs/VALIDATION.md](./docs/VALIDATION.md).
+The Tetele-derived ADF architecture is retained. No AEC, rmeissn FIR or
+48-kHz microphone path is enabled.
 
 ## Architecture
 
@@ -121,9 +121,10 @@ No persistent media-player repeat mode or additional stop wakeword is used.
 
 Timer behavior follows the principle from
 [Idskov/onju-voice-esphome](https://github.com/Idskov/onju-voice-esphome/tree/6b1809d780e0c741a5ef7b1b79b2ccbfc73e8f6f),
-adapted to our existing architecture. Physical validation is pending.
+adapted to our existing architecture. Timer operation and Center dismissal
+are hardware tested with the current local Voice-PE timer asset.
 
-## Touch and later physical validation
+## Touch controls
 
 | Pin | Function |
 | --- | --- |
@@ -154,19 +155,38 @@ for all three pads: raw, smooth, hardware benchmark, signed delta, software
 calibration baseline, software/hardware threshold, read status and touch ON/OFF.
 Keep `setup_mode: false` for normal use. There is no periodic diagnostic flood.
 
-Physical test checklist (pending):
+Hardware-tested: VOL−, Center, VOL+, dynamic touch, timer countdown/alarm,
+Center dismissal, and MWW recovery after timer. The existing on-demand
+`touch_diag_snapshot` remains available. Further model combinations and
+controlled safety/fault tests remain useful future checks.
 
-- Install only a separately approved OTA build; boot without touching the pads.
-- Boot/initialization and 125-second idle stability passed; test both native
-  additional wakeword combinations as needed. The Nabu/Alexa pair passed.
-- STT, immediate TTS/player, handover and recovery passed with the Nabu/Alexa pair;
-  recheck after any future functional change.
-- Check VOL−, Action, VOL+ including hold and release.
-- Read `touch_diag_snapshot` at idle and during touch; check both thresholds agree.
-- Test timer start/update/pause/resume/cancel, two timers, countdown toggle,
-  local alarm repetition, Center-touch dismiss and HA STOP during sound/gaps.
-- Check the 15-minute safety deadline and player-IDLE timeout under a controlled
-  fault; recheck voice/player recovery and at least two minutes of stability.
+## Factory installation and OTA
+
+Download the factory BIN and SHA256 file from the matching GitHub prerelease.
+Verify SHA256, then use an ESP32-compatible USB flashing tool to write the full
+factory image at **0x0** (ESP32-S3, 16-MB flash). It contains the bootloader,
+partition table, OTA data and application; do not treat it as an OTA-only image.
+This publication does not itself test USB recovery/first installation.
+
+Use **Improv Serial** to provision personal Wi-Fi credentials after USB
+installation. The distributed image uses generic identity/DHCP and intentionally
+non-personal dummy Wi-Fi values. No API keys, encryption keys or personal network
+settings are included. The firmware retains ESPHome OTA support. For later OTA,
+use an application/OTA image built from your private local secret configuration;
+never install the full factory image through an OTA-only path.
+
+## Local sound assets
+
+Wake and timer use official Voice-PE assets pinned to
+`d4e6fa43d6a1a7d342b7d4d403567e06516719de`, converted offline to MP3 for the
+existing ADF player. No normalization, gain change, trimming, fades or offline
+resampling. The existing generic error sound is also flash-resident, byte
+unchanged. Playback has no runtime GitHub dependency. The microphone remains
+16 kHz even though original playback assets are 48 kHz.
+
+Voice-PE sounds: © 2024 Clayton Charles Tapp, **CC BY 4.0**, not the repository's
+general MIT license. See [asset attribution](./onju-voice-assets/tetele-production/voicepe-sounds/README.md)
+and the included sound-specific notice, manifests and originals.
 
 ## Provenance and licenses
 

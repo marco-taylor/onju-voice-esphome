@@ -58,6 +58,7 @@
 
 #include "onju_wakeup_asset.h"
 #include "onju_timer_asset.h"
+#include "onju_error_asset.h"
 
 static const char *TAG = "HTTP_STREAM";
 #define MAX_PLAYLIST_LINE_SIZE (512)
@@ -442,6 +443,9 @@ static esp_err_t _http_open(audio_element_handle_t self)
     } else if (onju_uri && strcmp(onju_uri, "flash://onju-timer.mp3") == 0) {
         http->onju_data = onju_timer_mp3;
         http->onju_length = sizeof(onju_timer_mp3);
+    } else if (onju_uri && strcmp(onju_uri, "flash://onju-error.mp3") == 0) {
+        http->onju_data = onju_error_mp3;
+        http->onju_length = sizeof(onju_error_mp3);
     }
     http->onju_embedded = http->onju_data != NULL;
     if (http->onju_embedded) {

@@ -1,0 +1,72 @@
+{
+  "voice_pe_repository": "https://github.com/esphome/home-assistant-voice-pe",
+  "voice_pe_commit": "d4e6fa43d6a1a7d342b7d4d403567e06516719de",
+  "license": "CC-BY-4.0",
+  "author": "Clayton Charles Tapp",
+  "reference_sounds": [
+    {
+      "filename": "timer_finished.flac",
+      "sha256": "e9ddba38c4a993fd5a218ec7d04d7a2824b995a9dbb6cb0d8599d7a0ac6a56ee",
+      "bytes": 87093,
+      "codec": "flac",
+      "sample_rate": 48000,
+      "channels": 1,
+      "duration": "2.730667"
+    },
+    {
+      "filename": "wake_word_triggered.flac",
+      "sha256": "5c26cad33931670f2b62db5d2ed35c562b162e819ade38e646680065ad1b055f",
+      "bytes": 16782,
+      "codec": "flac",
+      "sample_rate": 48000,
+      "channels": 1,
+      "duration": "0.946979"
+    }
+  ],
+  "integrated": {
+    "wake": {
+      "original": "voicepe-wake_word_triggered.flac",
+      "mp3": "voicepe-wake_word_triggered.mp3",
+      "sha256": "ecee971a3ebd377afab133d0baa776bb179bcee0580304ced05f75b3985ccef9",
+      "unchanged_from_known_good": true
+    },
+    "timer": {
+      "original": "voicepe-timer_finished.flac",
+      "mp3": "voicepe-timer_finished.mp3",
+      "sha256": "137c741dde51c014b47175fb5244e58846eccfcd105bcc4fb7e7d979ea793cfb",
+      "sample_rate": 48000,
+      "channels": 1,
+      "bitrate": 320000,
+      "encoder": "ffmpeg 7.0.2-static / libmp3lame",
+      "encoder_binary_sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+      "arguments": [
+        "-v",
+        "error",
+        "-nostdin",
+        "-y",
+        "-i",
+        "voicepe-timer_finished.flac",
+        "-map",
+        "0:a:0",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "320k",
+        "-map_metadata",
+        "-1",
+        "-map_chapters",
+        "-1",
+        "-write_xing",
+        "1",
+        "voicepe-timer_finished.mp3"
+      ],
+      "processing": "encoding only; no resampling, channel changes, normalization, gain, trim, fade or filters"
+    },
+    "error": {
+      "mp3": "tetele-error-original.mp3",
+      "sha256": "9f948cee09e9f1935d4c867136544b3d4b341c30d279a21f8bc28c78eca18d9d",
+      "source": "https://raw.githubusercontent.com/tetele/onju-voice-satellite/e890b2676c6fad6ba806e5bf2d5649b176e9e3dd/res/error.mp3",
+      "unchanged_download_bytes": true
+    }
+  }
+}

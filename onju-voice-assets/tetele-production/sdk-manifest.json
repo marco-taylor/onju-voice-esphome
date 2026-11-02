@@ -1012,8 +1012,8 @@
       "member": "esp-adf-302f9a2c113d302776b896149fbcdd6d718438da/components/audio_stream/http_playlist.h"
     },
     "components/audio_stream/http_stream.c": {
-      "sha256": "6547ac4d787bdbb75e3e3e024f12b26d1c65ddf8c4cc9490c37f8002fb285623",
-      "bytes": 35092,
+      "sha256": "c7261ab3e01a780e608d9f507b21f6b4c5f2a7728019ce719d2420ef9a91969d",
+      "bytes": 35294,
       "overlay": "components/audio_stream/http_stream.c"
     },
     "components/audio_stream/i2s_stream.c": {
@@ -1172,8 +1172,8 @@
       "member": "esp-adf-302f9a2c113d302776b896149fbcdd6d718438da/components/audio_stream/lib/hls/test/test.c"
     },
     "components/audio_stream/onju_timer_asset.h": {
-      "sha256": "8cc73d03e6b5773328c165ce67b6082e189287593fa08338c232ed282f4d7824",
-      "bytes": 101536,
+      "sha256": "c38082decbd50768527469d95e0eee987f94bc4aa6f8de36392b8bcd670e4cd4",
+      "bytes": 564271,
       "overlay": "components/audio_stream/onju_timer_asset.h"
     },
     "components/audio_stream/onju_wakeup_asset.h": {
@@ -5040,6 +5040,11 @@
       "bytes": 6634,
       "archive": "adf",
       "member": "esp-adf-302f9a2c113d302776b896149fbcdd6d718438da/components/wifi_service/test/test_wifi_ssid_manager.c"
+    },
+    "components/audio_stream/onju_error_asset.h": {
+      "sha256": "eb61a8b24270e11b1ec07d51d230fa82ef1dcefff0787de2271efcc70298665a",
+      "bytes": 80036,
+      "overlay": "components/audio_stream/onju_error_asset.h"
     }
   }
 }

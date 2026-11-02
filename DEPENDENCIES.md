@@ -28,32 +28,20 @@ compatibility patches and the existing flash-stream shim/sound header are
 published under `onju-voice-assets/tetele-production/sdk-overlay/`.
 All generated SDK files must match the manifest before use.
 
-The local wakeup sound is the official Home Assistant Voice PE
-`sounds/wake_word_triggered.flac`, pinned at commit
-`d4e6fa43d6a1a7d342b7d4d403567e06516719de`, converted offline to MP3
-without trim, gain, fade, normalization or effects and embedded in the existing
-source header. Original FLAC SHA256:
-`5c26cad33931670f2b62db5d2ed35c562b162e819ade38e646680065ad1b055f`.
-Embedded MP3 SHA256:
-`ecee971a3ebd377afab133d0baa776bb179bcee0580304ced05f75b3985ccef9`.
-Source: https://github.com/esphome/home-assistant-voice-pe/blob/d4e6fa43d6a1a7d342b7d4d403567e06516719de/sounds/wake_word_triggered.flac .
-The upstream license assigns non-runtime assets to MIT; the complete original
-notice is retained in `docs/VOICE_PE_LICENSE.txt`. The unchanged production YAML retains a historical Freesound comment on the
-flash URL; the embedded header and hashes above identify the actual asset. The error sound retains its existing Tetele public URL; the timer sound is
-local flash audio as described below. No replacement sound or audio processing is introduced
-for publication.
+The current wake and timer sounds are the official Voice-PE sounds pinned to
+commit d4e6fa43d6a1a7d342b7d4d403567e06516719de, with sound-specific copyright
+© 2024 Clayton Charles Tapp and CC BY 4.0 license. They are not covered merely
+by the general upstream MIT notice. Original FLACs, exact hardware-tested MP3s,
+SHA256, encoder parameters and attribution are under
+`./onju-voice-assets/tetele-production/voicepe-sounds/`. The existing generic
+Tetele error MP3 is byte-unchanged and local; its separate UNIVERSFIELD
+attribution and historical license evidence are documented there. No unused
+Voice-PE sounds are distributed. Encoding only; no DSP/gain/trim/fade changes.
 
-The timer principle is attributed to Idskov at the pinned commit above; the
-original notice is retained in `docs/IDSKOV_LICENSE.txt`. Only the timer
-principle is adapted, not Idskov's audio architecture or RTTTL system.
-
-The timer adapter adds a command observer before the existing native player
-control logic and a second exact local URI in the existing flash reader. It
-does not change ADF DSP, I2S settings, DC/gain, MWW, native slots or handover.
-The generated three-beep timer signal is original CC0-1.0 audio, 48-kHz mono
-128-kbit/s MP3, embedded as a source header. MP3 SHA256:
-`fa98e9d816baf8d7d9341c70fe9e5d14cd47bc16b328eeba4e3c27ab0c61aac1`.
-The existing MP3 decoder resamples through the unchanged 16-kHz ADF path.
+The timer principle remains attributed to Idskov at the pinned commit above;
+the original MIT notice is in ./docs/IDSKOV_LICENSE.txt. Timer control, repeat,
+dismiss and safety logic are unchanged. The former generated CC0 timer signal
+is retained in history; it is no longer the active timer audio.
 
 The generated IDF dependency lock is recorded in `docs/idf-dependencies.lock`.
 Its local path entries are relative to the repository; its managed package

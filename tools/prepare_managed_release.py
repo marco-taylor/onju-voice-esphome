@@ -23,7 +23,9 @@ def digest(data, algorithm="sha256"):
     return hashlib.new(algorithm, data).hexdigest()
 
 
-def validate_manifest(manifest, expected_version=None):
+def validate_manifest(manifest, expected_version=None, release_tag=None):
+    release_tag = release_tag or "v" + manifest["version"]
+    assert re.fullmatch(r"[A-Za-z0-9._-]+", release_tag) and manifest["version"] in release_tag
     assert manifest["project"] == PROJECT, "Wrong project"
     assert manifest["hardware"] == HARDWARE, "Wrong board"
     assert re.fullmatch(SEMVER, manifest["version"]), "Not a release SemVer"
@@ -35,30 +37,31 @@ def validate_manifest(manifest, expected_version=None):
     ota = build["ota"]
     assert re.fullmatch(r"[0-9a-f]{32}", ota["md5"]), "Invalid MD5"
     assert re.fullmatch(r"[0-9a-f]{64}", ota["sha256"]), "Invalid SHA256"
-    prefix = f"https://github.com/{REPOSITORY}/releases/download/v{manifest['version']}/"
+    prefix = f"https://github.com/{REPOSITORY}/releases/download/{release_tag}/"
     assert ota["path"] == prefix + OTA_NAME, "OTA URL must be pinned to this release"
-    assert ota["release_url"] == f"https://github.com/{REPOSITORY}/releases/tag/v{manifest['version']}"
+    assert ota["release_url"] == f"https://github.com/{REPOSITORY}/releases/tag/{release_tag}"
     assert ota["size"] > 256
     return manifest
 
 
-def create_manifest(version, ota_bytes, include_factory=False):
-    prefix = f"https://github.com/{REPOSITORY}/releases/download/v{version}/"
+def create_manifest(version, ota_bytes, include_factory=False, release_tag=None):
+    release_tag = release_tag or "v" + version
+    prefix = f"https://github.com/{REPOSITORY}/releases/download/{release_tag}/"
     build = {"chipFamily": "ESP32-S3", "ota": {
         "path": prefix + OTA_NAME,
         "md5": digest(ota_bytes, "md5"),  # Official on-device ESPHome integrity field.
         "sha256": digest(ota_bytes),     # Release verification; not consumed by HTTP OTA.
         "size": len(ota_bytes),
         "summary": "Onju Voice firmware. Install only a hardware-approved release.",
-        "release_url": f"https://github.com/{REPOSITORY}/releases/tag/v{version}",
+        "release_url": f"https://github.com/{REPOSITORY}/releases/tag/{release_tag}",
     }}
     if include_factory:
         build["parts"] = [{"path": prefix + FACTORY_NAME, "offset": 0}]
     return validate_manifest({"name": "Onju Voice ESPHome", "version": version,
-                              "project": PROJECT, "hardware": HARDWARE, "builds": [build]}, version)
+                              "project": PROJECT, "hardware": HARDWARE, "builds": [build]}, version, release_tag)
 
 
-def package(build, output, source_revision, require_factory=False):
+def package(build, output, source_revision, require_factory=False, release_tag=None):
     build = Path(build).resolve()
     main = (build / "src/main.cpp").read_text()
     defines = (build / "src/esphome/core/defines.h").read_text()
@@ -114,7 +117,7 @@ def package(build, output, source_revision, require_factory=False):
     (output / OTA_NAME).write_bytes(ota)
     if factory is not None:
         (output / FACTORY_NAME).write_bytes(factory)
-    manifest = create_manifest(version, ota, factory is not None)
+    manifest = create_manifest(version, ota, factory is not None, release_tag)
     (output / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2) + "\n")
     source_root = Path(__file__).resolve().parents[1]
     source_files = [source_root / "onju-voice.yaml", source_root / "onju-voice-assets/tetele-production/sdk-manifest.json"]
@@ -141,8 +144,9 @@ def main():
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--commit", default="LOCAL-UNCOMMITTED")
     p.add_argument("--require-factory", action="store_true")
+    p.add_argument("--release-tag")
     a = p.parse_args()
-    print(json.dumps(package(a.build, a.out, a.commit, a.require_factory), indent=2))
+    print(json.dumps(package(a.build, a.out, a.commit, a.require_factory, a.release_tag), indent=2))
 
 
 if __name__ == "__main__":

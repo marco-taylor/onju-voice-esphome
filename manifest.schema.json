@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Onju release manifest (native ESPHome fields plus release-time guards)",
+  "type": "object",
+  "required": ["name", "version", "project", "hardware", "builds"],
+  "properties": {
+    "name": {"const": "Onju Voice ESPHome"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?$"},
+    "project": {"const": "tetele.onju_voice_satellite"},
+    "hardware": {"const": "onju-voice-esp32s3-16mb-8mb-psram"},
+    "builds": {
+      "type": "array", "minItems": 1, "maxItems": 1,
+      "items": {
+        "type": "object", "required": ["chipFamily", "ota"],
+        "properties": {
+          "chipFamily": {"const": "ESP32-S3"},
+          "ota": {
+            "type": "object", "required": ["path", "md5", "sha256", "size", "release_url"],
+            "properties": {
+              "path": {"type": "string", "pattern": "^https://github.com/marco-taylor/onju-voice-esphome/releases/download/v[^/]+/onju-voice\\.ota\\.bin$"},
+              "md5": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "size": {"type": "integer", "minimum": 257},
+              "summary": {"type": "string"},
+              "release_url": {"type": "string", "pattern": "^https://github.com/marco-taylor/onju-voice-esphome/releases/tag/v"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

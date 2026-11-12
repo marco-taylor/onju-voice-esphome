@@ -1,4 +1,9 @@
-# Onju Voice ESPHome — Known Good 2026-11
+# Onju Voice – Controlled Managed-Update RC
+
+Experimental test candidate based exactly on `06065b6c80fa5e88944add8415897251e0653885`
+(`known-good-2026-11-coldboot-20261112`). The known-good release remains unchanged.
+Managed-update hardware validation is pending; migrate only the explicitly approved
+first device. See [migration and test-channel design](./docs/MANAGED_UPDATES.md).
 
 Hardware-tested firmware for the original ESP32-S3 Onju Voice PCB with 8 MB
 PSRAM, built with **ESPHome 2026.10.2 / ESP-IDF 5.5.6**. Distributed as a
@@ -58,9 +63,10 @@ Automated startup/restore/persistence, mute, TTS and timer tests pass. The user
 confirmed the current wakeword firmware works; this does not assert that every
 physical cold-boot/offline/model-pair test was individually performed.
 
-**Home Assistant Managed Updates are NOT included.** No HTTP update entity, HTTP
-OTA platform, GitHub-latest manifest or managed-update buffer is included. Those
-remain separate development work for a later release. Native ESPHome OTA remains.
+**Managed Updates are experimental in this RC:** native HA firmware entity,
+GitHub-latest manifest, HTTPS OTA and a checked per-device identity/network profile.
+Native ESPHome OTA remains. Never install a generic image on a legacy private
+node before its one-time migration has been confirmed. No automatic installation.
 
 ## Architecture
 

@@ -1,7 +1,7 @@
 substitutions:
   name: "onju-voice"
   friendly_name: "Onju Voice"
-  project_version: "1.1.0"
+  project_version: "1.2.0-rc.1"
   device_description: "Onju Voice Satellite with ESPHome software and microWakeWord"
   wakeup_sound_url: "flash://onju-wakeup.mp3" # Existing official Voice PE wake tone; unchanged bytes
   error_sound_url: "flash://onju-error.mp3" # Existing Tetele error tone, now embedded without audio changes
@@ -11,13 +11,13 @@ external_components:
   - source:
       type: local
       path: onju-voice-assets/tetele-production/components
-    components: [adf_pipeline, i2s_audio, microphone, micro_wake_word, voice_assistant, esp32_touch, onju_timer, onju_startup, onju_sensitivity]
+    components: [adf_pipeline, i2s_audio, microphone, micro_wake_word, voice_assistant, esp32_touch, onju_timer, onju_startup, onju_sensitivity, onju_http_compat, wifi, onju_identity, onju_update_metrics]
 
 esphome:
   name: "${name}"
   friendly_name: "${friendly_name}"
   comment: "${device_description}"
-  name_add_mac_suffix: true
+  name_add_mac_suffix: false
   project:
     name: tetele.onju_voice_satellite
     version: "${project_version}"
@@ -77,21 +77,31 @@ logger:
 
 # Allow OTA updates
 ota:
-  platform: esphome
+  - platform: esphome
+    id: ota_esphome
+  - platform: http_request
+    id: ota_http
+    http_request_id: firmware_http
 
 # Allow provisioning Wi-Fi via serial
 improv_serial:
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
+  # Provision once via Improv Serial. No compiled credentials: stable native Wi-Fi NVS key.
   reboot_timeout: 0s
+
 network:
   enable_ipv6: true
 
 api:
   reboot_timeout: 0s
   actions:
+    - action: update_memory_begin
+      then:
+        - lambda: id(onju_memory_metrics).begin("manifest-check");
+    - action: update_memory_end
+      then:
+        - lambda: id(onju_memory_metrics).end();
     - action: touch_diag_snapshot
       then:
         - lambda: id(onju_touch_diag_hub).dump_config();
@@ -999,3 +1009,32 @@ select:
           id(hey_jarvis).set_probability_cutoff(212);
           id(hey_mycroft).set_probability_cutoff(237);
         }
+
+# Preserve established ADF HTTPS behavior; the updater itself uses verified TLS.
+onju_http_compat:
+
+# Official managed updater. No auto-install; HA must explicitly request installation.
+http_request:
+  id: firmware_http
+  verify_ssl: true
+  follow_redirects: true
+  redirect_limit: 5
+  timeout: 15s
+  buffer_size_rx: 4096
+  buffer_size_tx: 4096
+
+update:
+  - platform: http_request
+    id: onju_firmware_update
+    name: Firmware
+    entity_category: config
+    device_class: firmware
+    http_request_id: firmware_http
+    ota_id: ota_http
+    source: https://github.com/marco-taylor/onju-voice-esphome/releases/latest/download/onju-voice.manifest.json
+    update_interval: 6h
+
+onju_identity:
+
+onju_update_metrics:
+  id: onju_memory_metrics

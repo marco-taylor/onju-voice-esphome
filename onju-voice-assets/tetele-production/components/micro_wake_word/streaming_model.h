@@ -8,6 +8,7 @@
 #include "esphome/core/preferences.h"
 
 #include <memory>
+#include <atomic>
 #include <tensorflow/lite/core/c/common.h>
 #include <tensorflow/lite/micro/micro_interpreter.h>
 #include <tensorflow/lite/micro/micro_mutable_op_resolver.h>
@@ -56,6 +57,7 @@ class StreamingModel {
 
   /// @brief Return true if the model is enabled.
   bool is_enabled() const { return this->enabled_; }
+  uint32_t get_successful_inferences() const { return this->successful_inferences_.load(std::memory_order_relaxed); }
 
   /// @brief Return true if the model has usable data. A model without it can never be loaded or run.
   bool has_model_data() const { return this->model_start_ != nullptr; }
@@ -80,6 +82,7 @@ class StreamingModel {
 
   tflite::MicroMutableOpResolver<20> streaming_op_resolver_;
 
+  std::atomic<uint32_t> successful_inferences_{0};
   bool loaded_{false};
   bool enabled_{true};
   bool tensor_arena_size_probed_{false};

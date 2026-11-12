@@ -231,6 +231,7 @@ bool StreamingModel::perform_streaming_inference(const int8_t features[PREPROCES
         return false;
       }
 
+      this->successful_inferences_.fetch_add(1, std::memory_order_relaxed);
       TfLiteTensor *output = this->interpreter_->output(0);
 
       ++this->last_n_index_;

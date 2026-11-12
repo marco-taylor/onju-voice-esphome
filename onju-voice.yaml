@@ -11,7 +11,7 @@ external_components:
   - source:
       type: local
       path: onju-voice-assets/tetele-production/components
-    components: [adf_pipeline, i2s_audio, microphone, micro_wake_word, voice_assistant, esp32_touch, onju_timer]
+    components: [adf_pipeline, i2s_audio, microphone, micro_wake_word, voice_assistant, esp32_touch, onju_timer, onju_startup, onju_sensitivity]
 
 esphome:
   name: "${name}"
@@ -91,20 +91,20 @@ network:
 
 api:
   reboot_timeout: 0s
-  services:
-    - service: touch_diag_snapshot
+  actions:
+    - action: touch_diag_snapshot
       then:
         - lambda: id(onju_touch_diag_hub).dump_config();
-    - service: start_va
+    - action: start_va
       then:
         - voice_assistant.start
-    - service: stop_va
+    - action: stop_va
       then:
         - voice_assistant.stop
-    - service: notification_on
+    - action: notification_on
       then:
         - script.execute: turn_on_notification
-    - service: notification_clear
+    - action: notification_clear
       then:
         - script.execute: clear_notification
 
@@ -255,8 +255,13 @@ micro_wake_word:
                       lambda: return !id(va).is_running() && !id(mww).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state();
                     then:
                       - logger.log: "HANDOVER released; optional configured delay elapsed -> VA START"
-                      - voice_assistant.start:
-                          wake_word: !lambda return wake_word;
+                      - if:
+                          condition: voice_assistant.connected
+                          then:
+                            - voice_assistant.start:
+                                wake_word: !lambda return wake_word;
+                          else:
+                            - lambda: id(onju_wakeword_startup).request_start("offline_wakeword");
                     else:
                       - logger.log:
                           level: ERROR
@@ -276,6 +281,15 @@ micro_wake_word:
           - logger.log:
               level: DEBUG
               format: "MUTE: wakeword ignored; microphone muted"
+
+onju_startup:
+  id: onju_wakeword_startup
+  mww: mww
+  microphone: onju_microphone
+  voice_assistant: va
+  use_wake_word: use_wake_word
+  hardware_mute: mute_switch
+  handover_idle: !lambda return !id(onju_wakeword_recover).is_running() && !id(mww).get_wake_word_detected_trigger()->is_action_running();
 
 onju_timer:
   id: onju_timers
@@ -382,7 +396,7 @@ voice_assistant:
             - switch.is_on: use_wake_word
             - binary_sensor.is_off: mute_switch
         then:
-          - micro_wake_word.start:
+          - lambda: id(onju_wakeword_startup).request_start("ha_connected");
   on_client_disconnected:
     - if:
         condition:
@@ -392,6 +406,7 @@ voice_assistant:
         then:
           - voice_assistant.stop:
           - micro_wake_word.stop:
+          - lambda: id(onju_wakeword_startup).request_start("ha_disconnected");
   on_error:
     - media_player.play_media: "${error_sound_url}"
     - light.turn_on:
@@ -588,7 +603,7 @@ light:
     pin: GPIO11
     chipset: SK6812
     num_leds: 6
-    rgb_order: grb
+    channel_colors: GRB
 
     # ESP-IDF 5 allocates the RMT channel automatically.
     default_transition_length: 0s
@@ -685,7 +700,7 @@ script:
             lambda: return !id(onju_microphone).get_mute_state() && !id(va).is_running() && !id(onju_wakeword_recover).is_running() && !id(mww).get_wake_word_detected_trigger()->is_action_running() && !id(mww).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state;
           then:
             - logger.log: "MUTE: unmute consumers released -> MWW START"
-            - micro_wake_word.start:
+            - lambda: id(onju_wakeword_startup).request_start("unmute");
       - script.execute: reset_led
 
   # One bounded handover/END/ERROR cleanup; never starts a second VA.
@@ -850,7 +865,7 @@ script:
               - binary_sensor.is_off: mute_switch
               - switch.is_on: use_wake_word
           then:
-            - micro_wake_word.start
+            - lambda: id(onju_wakeword_startup).request_start("switch_or_gpio");
             - script.execute: reset_led
           else:
             - logger.log:
@@ -864,6 +879,7 @@ script:
 
   - id: turn_off_wake_word
     then:
+      - lambda: id(onju_wakeword_startup).cancel_start();
       - micro_wake_word.stop
       - script.execute: reset_led
 
@@ -888,6 +904,7 @@ switch:
     restore_mode: ALWAYS_OFF
     lambda: return id(onju_microphone).get_mute_state();
     turn_on_action:
+      - lambda: id(onju_wakeword_startup).cancel_start();
       - microphone.mute: onju_microphone
       - script.stop: onju_unmute_listen
       - lambda: id(mww).get_wake_word_detected_trigger()->stop_action();
@@ -934,7 +951,7 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     on_turn_on:
-      - script.execute: turn_on_wake_word
+      - lambda: id(onju_wakeword_startup).request_start("use_wake_word_on");
     on_turn_off:
       - script.execute: turn_off_wake_word
   - platform: template
@@ -956,13 +973,11 @@ switch:
 
 # Native HA Assist-Satellite owns model activation; sensitivity only.
 select:
-  - platform: template
+  - platform: onju_sensitivity
     id: tetele_wake_word_sensitivity
     name: "Wake word sensitivity"
-    optimistic: true
-    # The productive firmware has four options; do not restore its numeric index
-    # into this three-option A/B test. Start consistently at Moderate on boot.
-    restore_value: false
+    # Versioned storage excludes legacy four-option indices without changing HA identity.
+    restore_value: true
     initial_option: Moderately sensitive
     entity_category: config
     options:

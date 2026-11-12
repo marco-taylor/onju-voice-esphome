@@ -2,7 +2,7 @@
 
 | Dependency | Reference | Role / terms |
 | --- | --- | --- |
-| ESPHome | 2026.10.0 | Python MIT; C++ runtime GPLv3 |
+| ESPHome | 2026.10.2 | Python MIT; C++ runtime GPLv3 |
 | ESP-IDF | 5.5.6, resolved by ESPHome | Espressif toolchain / Apache-2.0 and included notices |
 | ESP-ADF | `302f9a2c113d302776b896149fbcdd6d718438da` | 16 local ADF components, upstream notices retained |
 | esp-adf-libs | `3b34541c9212faa50c252f5fd00c36b6077ee96d` | Original upstream prebuilt libraries and license terms |

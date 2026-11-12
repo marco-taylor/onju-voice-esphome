@@ -18,6 +18,7 @@
 #endif
 
 #include <freertos/event_groups.h>
+#include <atomic>
 
 #include <frontend.h>
 #include <frontend_util.h>
@@ -49,6 +50,13 @@ class MicroWakeWord final : public Component
 
   void start();
   void stop();
+
+  uint32_t get_received_audio_bytes() const { return this->audio_bytes_.load(std::memory_order_relaxed); }
+  uint32_t get_successful_inferences() const {
+    uint32_t count = 0;
+    for (auto *model : this->wake_word_models_) count += model->get_successful_inferences();
+    return count;
+  }
 
   bool is_running() const { return this->state_ != State::STOPPED; }
   bool is_detecting_wake_word() const { return this->state_ == State::DETECTING_WAKE_WORD; }
@@ -119,6 +127,7 @@ class MicroWakeWord final : public Component
   bool vad_state_{false};
 #endif
 
+  std::atomic<uint32_t> audio_bytes_{0};  // Read-only startup progress, no PCM processing changes.
   bool pending_start_{false};
   bool pending_stop_{false};
 

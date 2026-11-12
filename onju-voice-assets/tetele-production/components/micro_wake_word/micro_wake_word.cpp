@@ -136,6 +136,8 @@ void MicroWakeWord::setup() {
       if (temp_ring_buffer->write_without_replacement(data.data(), data.size(), 0, false) == 0) {
         xEventGroupSetBits(this->event_group_,
                            EventGroupBits::WARNING_FULL_RING_BUFFER | EventGroupBits::COMMAND_RESET_RING_BUFFER);
+      } else {
+        this->audio_bytes_.fetch_add(data.size(), std::memory_order_relaxed);
       }
     }
   });
@@ -532,6 +534,8 @@ void MicroWakeWord::start() {
 }
 
 void MicroWakeWord::stop() {
+  // Also cancel a start queued earlier in the same main-loop iteration.
+  this->pending_start_ = false;
   if (this->state_ == STOPPED)
     return;
 

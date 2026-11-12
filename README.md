@@ -1,7 +1,7 @@
 # Onju Voice ESPHome — Known Good 2026-11
 
 Hardware-tested firmware for the original ESP32-S3 Onju Voice PCB with 8 MB
-PSRAM, built with **ESPHome 2026.10.0 / ESP-IDF 5.5.6**. Distributed as a
+PSRAM, built with **ESPHome 2026.10.2 / ESP-IDF 5.5.6**. Distributed as a
 **development prerelease**, not v1.0/stable.
 
 **HARDWARE TESTED:** Okay Nabu / slot 1 and Alexa / slot 2 concurrently; correct
@@ -17,7 +17,7 @@ implemented/build validated; dedicated real-time/fault-injection tests are not
 newly claimed by this milestone.
 
 **BUILD VALIDATED:** Config PASS, Codegen PASS, fresh Clean Build PASS with
-ESPHome 2026.10.0; see [./docs/VALIDATION.md](./docs/VALIDATION.md).
+ESPHome 2026.10.2; see [./docs/VALIDATION.md](./docs/VALIDATION.md).
 
 The Tetele-derived ADF architecture is retained. No AEC, rmeissn FIR or
 48-kHz microphone path is enabled.
@@ -36,10 +36,31 @@ repeated mute/unmute, Okay Nabu and Alexa/pipeline 2 after unmute, red indicatio
 and media player and timer operation while muted. This is software muting of
 microphone data, not an electrical microphone disconnect.
 
-Sensitivity definitions, VAD, models and the existing nonpersistent sensitivity
-selector are unchanged. Its boot default remains **Moderately sensitive**;
-a user-selected runtime sensitivity is not embedded into the generic factory
-image. This release does not change the running device's selected sensitivity.
+## Local wakeword startup and persistent sensitivity
+
+ESPHome 2026.10.2 known-good milestone: the user confirmed wakeword operation
+on the installed firmware. The local startup reconciler runs after switch restore
+and component setup. It honors **Use Wake Word OFF**, hardware mute and software
+mute, leaves microphone startup to microWakeWord, and verifies actual audio and
+successful wakeword inference. Readiness failures use at most two bounded attempts
+(15-second check, 10-second release, 45-second overall deadline), never an endless
+restart loop. Listening does not require a VA client to subscribe first. The
+normal VA-IDLE/TTS handover and recovery remain unchanged.
+
+**Wake word sensitivity is persistent.** The same three options and cutoff table
+use a versioned preference isolated from obsolete four-option indices. First use
+defaults to Moderate only if no valid new preference exists. Actual user changes
+are saved and synchronized after saving; repeating the same value does not write
+again. The normal global 60-second preference policy remains unchanged. Other
+switch/model changes should be allowed to sync before hard power removal.
+
+Automated startup/restore/persistence, mute, TTS and timer tests pass. The user
+confirmed the current wakeword firmware works; this does not assert that every
+physical cold-boot/offline/model-pair test was individually performed.
+
+**Home Assistant Managed Updates are NOT included.** No HTTP update entity, HTTP
+OTA platform, GitHub-latest manifest or managed-update buffer is included. Those
+remain separate development work for a later release. Native ESPHome OTA remains.
 
 ## Architecture
 
@@ -61,7 +82,7 @@ image. This release does not change the running device's selected sensitivity.
   start delay; Wake Word Listening Light and existing LED behavior.
 - Native ADF media-player volume; no additional volume Number entity.
 - Dynamic S3 touch calibration, adapted from rmeissn commit
-  `09b3b65c237e8dc42c40677492965865429fe12e` to ESPHome 2026.10.0 / IDF 5.5.6.
+  `09b3b65c237e8dc42c40677492965865429fe12e` to ESPHome 2026.10.2 / IDF 5.5.6.
 - Native Voice Assistant timers: proportional LED countdown, optional **Timer LED**
   switch (default ON), repeated local flash MP3 alarm and Center-touch dismissal.
 - No old PCM/raw capture probes or audio diagnostic buffers.
@@ -71,8 +92,8 @@ is the functional microphone source, not an audio capture probe.
 
 ## Build the known-good source
 
-Use Python 3.12–3.14 and the pinned ESPHome 2026.10.0 environment
-for compilation. ESPHome 2026.10.0 selects ESP-IDF 5.5.6. The native ESP-IDF
+Use Python 3.12–3.14 and the pinned ESPHome 2026.10.2 environment
+for compilation. ESPHome 2026.10.2 selects ESP-IDF 5.5.6. The native ESP-IDF
 builder/toolchain and IDF Component Manager require network access and disk
 space for their dependencies. See [./DEPENDENCIES.md](./DEPENDENCIES.md).
 

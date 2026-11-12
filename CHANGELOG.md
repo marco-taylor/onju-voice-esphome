@@ -1,5 +1,21 @@
 # Changelog
 
+## Known good — ESPHome 2026.10.2 startup and sensitivity, 2026-11-12
+
+- User-confirmed working wakeword firmware on the installed devices.
+- Fix Use Wake Word's pre-publish restore/start gap using a local post-setup
+  reconciler, bounded startup checks/retry and OFF/mute/VA ownership guards.
+- Verify actual microphone audio and successful model inference at startup;
+  leave microphone start ownership with microWakeWord.
+- Persist sensitivity with versioned three-option storage, unchanged cutoffs,
+  actual-change-only writes and a sync after saving.
+- Preserve five models, two native slots, ADF/DC/audio/gain, software mute, the
+  VA-IDLE/TTS fix, timer safety, touch, LEDs and local Voice-PE sounds.
+- Generic DHCP/MAC identity, Improv Serial, ordinary ESPHome OTA and full USB
+  factory image from the validated public build.
+- Home Assistant Managed Updates NOT included; no manifest/HTTP OTA/update entity.
+- Historical releases, tags and assets remain unchanged. No device OTA here.
+
 ## Known good + Software Mute — 2026-11-02
 
 - Hardware-tested native microphone mute/unmute; Mute is a Home Assistant

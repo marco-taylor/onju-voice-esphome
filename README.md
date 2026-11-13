@@ -98,38 +98,157 @@ node before its one-time migration has been confirmed. No automatic installation
 The microphone source ID `mww_probe_source` is retained for compatibility; it
 is the functional microphone source, not an audio capture probe.
 
-## Build the known-good source
+## Using with ESPHome
 
-Use Python 3.12–3.14 and the pinned ESPHome 2026.10.2 environment
-for compilation. ESPHome 2026.10.2 selects ESP-IDF 5.5.6. The native ESP-IDF
-builder/toolchain and IDF Component Manager require network access and disk
-space for their dependencies. See [./DEPENDENCIES.md](./DEPENDENCIES.md).
+### One source, two supported update paths
+
+**Recommended production path:** install the release factory image → provision
+Wi-Fi with Improv Serial → add the device to Home Assistant → use its firmware
+update entity. Updates come from GitHub
+[releases/latest](https://github.com/marco-taylor/onju-voice-esphome/releases/latest),
+using [the native manifest](https://github.com/marco-taylor/onju-voice-esphome/releases/latest/download/onju-voice.manifest.json).
+No ESPHome container is required for these updates.
+
+**Advanced ESPHome path:** clone this repository → optionally configure local
+secrets → validate/compile in ESPHome → use native ESPHome OTA. This remains
+supported for self-builders, developers, customization, debugging and recovery.
+Local changes are replaced by a later generic managed update; keep using your
+own builds if you need custom behavior.
+
+**Source of truth:** [./onju-voice.yaml](./onju-voice.yaml), together with its
+local components, SDK manifest/overlays, pinned models and local sound assets.
+Tag **v1.2.0** contains the exact generic source used for the final 1.2.0 build.
+There is no separate simplified example or independently maintained HA firmware.
+The compatibility entry points [./main.yaml](./main.yaml) and
+[./onju_duplex_i2s.yaml](./onju_duplex_i2s.yaml) include this same YAML; the latter
+name does not enable AEC or a different audio architecture.
+
+### Clone and validate with Docker
+
+Release 1.2.0 was tested with **ESPHome 2026.10.2 / ESP-IDF 5.5.6**. Pin this
+version rather than an evolving `stable` or `latest` container tag. The commands
+below run from the repository root on a Docker host; the SDK bootstrap and first
+build need Internet access and space for toolchain/registry dependencies.
+Linux `--network=host` allows local-device access for upload/logs. On other Docker
+platforms, use their supported networking and specify the device's reachable
+address explicitly. Bind-mounted files may be owned by the container's user.
 
 ```sh
-python3 tools/bootstrap_sdk.py
-python3 -m pip install -r requirements.txt
-cp secrets.example.yaml secrets.yaml
-# Edit secrets.yaml locally before using real hardware.
-esphome config onju-voice.yaml
-esphome compile --only-generate onju-voice.yaml
-esphome clean onju-voice.yaml
-esphome compile onju-voice.yaml
+git clone https://github.com/marco-taylor/onju-voice-esphome.git
+cd onju-voice-esphome
+git checkout v1.2.0
+
+docker run --rm --entrypoint python3 -v "$PWD":/config \
+  ghcr.io/esphome/esphome:2026.10.2 /config/tools/bootstrap_sdk.py
+
+docker run --rm --network=host -v "$PWD":/config \
+  ghcr.io/esphome/esphome:2026.10.2 config /config/onju-voice.yaml
+
+docker run --rm --network=host -v "$PWD":/config \
+  ghcr.io/esphome/esphome:2026.10.2 compile /config/onju-voice.yaml
 ```
 
-The bootstrap downloads three exact Espressif commits, checks archive SHA256,
-then reconstructs every SDK file against the production manifest and local
-source overlays. Generated SDK files and downloads are ignored. Espressif's
-upstream archives include prebuilt libraries; they are fetched from their
-original source, not rehosted as firmware in this repository.
+The bootstrap verifies pinned upstream archive SHA256 values and reconstructs
+all 843 SDK files against the production manifest and overlays. Run it before
+validation/build; its generated SDK and cache are ignored. No firmware is
+installed by these commands. The resulting files are under
+`./.esphome/build/onju-voice/build/`: `firmware.factory.bin` and
+`firmware.ota.bin`. See [./DEPENDENCIES.md](./DEPENDENCIES.md) for exact inputs
+and [./tools/prepare_managed_release.py](./tools/prepare_managed_release.py) for
+release packaging from that same build.
 
-The public YAML uses `!secret wifi_ssid` / `!secret wifi_password`, a generic
-device name and DHCP. Set credentials only in your ignored local secret file.
-The public-source build is checked with dummy credentials. No personal device
-configuration, tokens, backups, firmware BINs or build outputs are versioned.
+Without Docker, use Python 3.12–3.14, install
+[./requirements.txt](./requirements.txt), run `python3 ./tools/bootstrap_sdk.py`,
+then `esphome config ./onju-voice.yaml` and
+`esphome compile ./onju-voice.yaml`. Do not mix ESPHome versions within a build.
 
-`./main.yaml` and `./onju_duplex_i2s.yaml` remain compatibility entry points to
-`./onju-voice.yaml`; the latter filename is historical and does not enable AEC
-or a different full-duplex architecture.
+### Wi-Fi and local secrets
+
+**The unmodified release YAML requires no secrets entries.** It intentionally
+has no compiled Wi-Fi station, password, API key or OTA password. Provision Wi-Fi
+via Improv Serial after USB installation; later generic images load native
+saved Wi-Fi settings. No dummy Wi-Fi credentials are compiled into 1.2.0.
+
+For a deliberately private self-build with compiled credentials, copy
+[./secrets.example.yaml](./secrets.example.yaml) to `./secrets.yaml`, replace its
+two placeholders locally, then add these fields to the **existing** `wifi:`
+block in your local copy of [./onju-voice.yaml](./onju-voice.yaml):
+
+```yaml
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  reboot_timeout: 0s
+```
+
+This is an optional local overlay of the production configuration, not another
+firmware line. `./secrets.yaml` is gitignored. Never publish the resulting BIN,
+expanded config output or logs containing credentials. No API/OTA secret entry
+is required by the base configuration.
+
+**Managed-update boundary:** a compiled-station build uses a different native
+Wi-Fi preference key from the zero-station shared image. Merely compiling
+credentials does not migrate them to the shared image. Before returning to a
+generic managed image, ensure credentials exist under its Improv/native saved
+Wi-Fi key, and confirm any required identity/network migration. Custom static
+network settings are likewise not automatically converted into a persisted
+profile. Keep a working recovery path. The generic factory build contains no
+private Wi-Fi data and uses DHCP.
+
+### Device name and identity
+
+On a **new, unprofiled** device, the `name` and `friendly_name` substitutions at
+the top of [./onju-voice.yaml](./onju-voice.yaml) set the base names. The existing
+identity component appends a MAC-derived suffix. Keep
+`name_add_mac_suffix: false`: this project's identity component supplies it.
+For example, compile with overrides without editing the shared YAML:
+
+```sh
+docker run --rm --network=host -v "$PWD":/config \
+  ghcr.io/esphome/esphome:2026.10.2 \
+  -s name my-onju -s friendly_name "My Onju" compile /config/onju-voice.yaml
+```
+
+A valid existing MAC-bound identity profile takes precedence over these
+substitutions. Changing them does not rename a migrated device. Unprofiled
+custom base names are not automatically retained by a later generic image.
+For a display-only change, use Home Assistant's device name. Do not erase NVS
+or reuse another device's profile. Private per-device bootstrap configurations
+are not distributed here; see [migration details](./docs/MANAGED_UPDATES.md).
+
+### First installation, classic OTA and logs
+
+For USB first installation/recovery, use the full
+`./.esphome/build/onju-voice/build/firmware.factory.bin` from your build (or the
+matching release factory asset). Flash at **0x0** with an ESP32-S3-compatible
+USB flashing tool, then configure Wi-Fi through Improv Serial. Factory flashing
+is not the normal update path for an existing configured device.
+
+For an existing compatible node, replace `DEVICE_ADDRESS` with that device's
+reachable hostname/IP. The commands below upload only the last compiled OTA
+application, then allow log inspection; they do not compile a different image.
+Always verify the intended device and identity before upload.
+
+```sh
+docker run --rm --network=host -v "$PWD":/config \
+  ghcr.io/esphome/esphome:2026.10.2 upload /config/onju-voice.yaml --device DEVICE_ADDRESS
+
+docker run --rm --network=host -v "$PWD":/config \
+  ghcr.io/esphome/esphome:2026.10.2 logs /config/onju-voice.yaml --device DEVICE_ADDRESS
+```
+
+Never upload the full factory image through an OTA-only path. Native API logs
+show initialization, MWW startup and errors; the existing
+`touch_diag_snapshot` action provides an on-demand touch snapshot. Avoid
+publishing private logs. USB serial logs additionally require mapping your
+actual serial device into the container. Existing legacy/private firmware may
+need a verified one-time migration before generic OTA; preserve identity,
+network settings and NVS as described in the migration guide.
+
+These CLI commands also apply to a persistent ESPHome container when the
+**entire repository** is mounted at its configuration root. Keep the YAML,
+local components, assets and bootstrapped SDK together. Point the dashboard at
+this YAML rather than copying it alone into an unrelated configuration folder.
 
 ## Voice Assistant timers
 
@@ -210,18 +329,18 @@ controlled safety/fault tests remain useful future checks.
 
 ## Factory installation and OTA
 
-Download the factory BIN and SHA256 file from the matching GitHub prerelease.
+Download the factory BIN and SHA256SUMS from the matching GitHub release.
 Verify SHA256, then use an ESP32-compatible USB flashing tool to write the full
 factory image at **0x0** (ESP32-S3, 16-MB flash). It contains the bootloader,
 partition table, OTA data and application; do not treat it as an OTA-only image.
 This publication does not itself test USB recovery/first installation.
 
 Use **Improv Serial** to provision personal Wi-Fi credentials after USB
-installation. The distributed image uses generic identity/DHCP and intentionally
-non-personal dummy Wi-Fi values. No API keys, encryption keys or personal network
-settings are included. The firmware retains ESPHome OTA support. For later OTA,
-use an application/OTA image built from your private local secret configuration;
-never install the full factory image through an OTA-only path.
+installation. The distributed image uses generic MAC-based identity/DHCP and no
+compiled Wi-Fi station. No API keys, encryption keys or personal network settings
+are included. Use Home Assistant Managed Updates for routine production updates;
+native ESPHome OTA remains available for self-builds. Never install the full
+factory image through an OTA-only path.
 
 ## Local sound assets
 
@@ -246,7 +365,7 @@ for attribution; its old architecture and hardware claims do not describe this
 milestone. Original license notices are retained. See
 [./DEPENDENCIES.md](./DEPENDENCIES.md) for exact SDK revisions, overlays and
 third-party terms. The full USB factory image is distributed as a GitHub
-prerelease asset with SHA256, not committed to Git. No stable/v1.0 release.
+release asset with SHA256SUMS, not committed to Git. Release 1.2.0 is a normal
+production release.
 The factory image includes Improv Serial for Wi-Fi provisioning and OTA.
-Its Wi-Fi placeholders are intentionally non-personal; provision real credentials
-locally. USB installation itself has not been exercised by this publication.
+It has no compiled Wi-Fi station; provision real credentials locally. USB installation itself has not been exercised by this publication.

@@ -1,27 +1,40 @@
-# Known-good validation — 2026-11-12
+# Production validation — 1.2.0
 
-ESPHome **2026.10.2**, ESP-IDF **5.5.6**. Config, Codegen and fresh Clean Build
-are required for publication. Host tests exercise the real local startup and
-sensitivity headers, microphone mute/VA guards, preserved pending-TTS race fix
-and timer safety.
+Release tag **v1.2.0**, source commit
+`133cd1024a7a53551fb4367be7ed44216d9c7b2e`, was validated with
+**ESPHome 2026.10.2 / ESP-IDF 5.5.6**: Config, Codegen, fresh Clean Build and
+all relevant host/native/packager regression tests PASS.
 
-The user confirmed wakeword PASS/current installed firmware works. Existing
-known-good dual-pipeline, mute, timer/touch and Voice-PE sound acceptance is
-retained. This is not a claim that each physical power-cycle/offline/model-pair
-test was separately performed.
+The hardware-approved RC2 source is
+`78bf58dbcc1f1ece2daa4957776cb3608fc0d7fb`. Final 1.2.0 differs only in
+project-version/release metadata and documentation. Generated runtime code,
+component sources, dependencies, SDK, models and sounds were compared.
+The user accepted both devices: wakeword/Assist/TTS, mute, timer/touch,
+real cold boot and sensitivity retention. This does not claim every possible
+wakeword pair or every fault-injection case was physically tested.
 
-Production and release component/SDK/audio inputs must match. YAML comparison
-permits only generic name, friendly name, MAC suffix and DHCP instead of private
-identity/static network values. Project version remains 1.1.0, matching the
-installed reference; this release has no version-driven managed update feature.
-Factory Application bytes are compared with the exact validated public App.
-Public/private firmware bytes differ due to identity/network/build metadata.
+The source of truth is [../onju-voice.yaml](../onju-voice.yaml), including its
+local components and pinned build inputs. The same generic YAML supplies both
+release artifacts and self-builds; see [Using with ESPHome](../README.md#using-with-esphome).
+No compiled Wi-Fi station or personal identity is present in the shared image.
+Improv/native saved Wi-Fi and the tested MAC-bound identity/Preferences
+migration are retained. Optional private `!secret` Wi-Fi changes are local
+customizations, not the distributed generic release configuration.
 
-Five models plus VAD, two slots, ADF/DC, VA-IDLE END barrier, bounded local startup,
-versioned sensitivity, software mute, timer safety, dynamic touch, local sounds,
-Improv Serial and native ESPHome OTA must be present. No HTTP Update Entity,
-HTTP OTA, managed-update manifest or additional HTTP buffer is included.
+Regression coverage includes bounded MWW startup/restore, sensitivity
+persistence, OFF/mute guards, pending-start cancellation, microphone/VA guards,
+VA-IDLE/TTS recovery, timer safety, identity/NVS/native Wi-Fi, HTTP OTA error
+paths, update actions, TLS compatibility, native manifest parsing and release
+packaging. Five models plus VAD, two slots, ADF/DC, dynamic touch, local
+Voice-PE sounds, Improv Serial and native ESPHome OTA remain present.
 
-Historical releases and assets remain available. No OTA/reboot or user-setting
-change is performed during this publication. Sound-specific CC BY 4.0 attribution
-and original notices remain unchanged.
+HTTP OTA and the HA Update Entity use verified TLS, five redirects and
+4096-byte RX/TX buffers. The production source is GitHub
+`releases/latest/download/onju-voice.manifest.json`; installation requires an
+explicit user action. Factory/OTA application bytes match the same final build.
+All published assets were downloaded and byte/hash verified; historical
+releases, tags and assets remain unchanged.
+
+Documentation-only follow-ups do not rebuild or replace the immutable v1.2.0
+release. They validate the repository instructions separately and do not
+install firmware, reboot devices or change device settings.

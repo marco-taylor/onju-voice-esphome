@@ -1,8 +1,10 @@
-# Controlled managed-update candidate
+# Home Assistant Managed Updates — 1.2.0
 
-Base: `06065b6c80fa5e88944add8415897251e0653885`
-(`known-good-2026-11-coldboot-20261112`). This is test development, not an
-assertion of completed physical validation. Do not overwrite historical releases.
+Production release of hardware-accepted RC2 source
+`78bf58dbcc1f1ece2daa4957776cb3608fc0d7fb`, descended from
+`06065b6c80fa5e88944add8415897251e0653885`
+(`known-good-2026-11-coldboot-20261112`). Historical releases stay unchanged.
+Only release/version metadata differs from RC2.
 
 The native ESPHome 2026.10.2 HTTP update/OTA components use GitHub
 `releases/latest/download/onju-voice.manifest.json`, CA-verified TLS, five
@@ -42,7 +44,7 @@ remain unchanged for migrated devices. Home Assistant retains pipeline settings
 and its MAC-based device mapping. Software Mute deliberately remains ALWAYS_OFF
 at boot. Do not claim arbitrary power-loss-during-flash or corrupted-NVS recovery.
 
-## Measurement and test channel
+## Measurement and release channel
 
 `onju_update_metrics` uses IDF's local heap-minimum monitor, with no capture
 buffer or dedicated sampling task. Native API actions begin/end a bounded
@@ -50,10 +52,9 @@ measurement; OTA callbacks record the TLS/download/flash interval. Largest free
 blocks are reported at boundaries, not falsely claimed as an exact transient
 largest-block minimum. Boot measurement ends automatically after 170 seconds.
 
-GitHub prereleases cannot be latest. Controlled RC tags therefore require a
-**normal GitHub test release explicitly marked latest**, with release notes
-clearly identifying pending hardware validation. This is not a quality/stable
-claim. Old known-good tags/assets stay unchanged. Initial RC and next RC must
-have strictly increasing SemVer versions; factory and OTA come from one build.
-Only the designated first device may be migrated/tested. Physical wakeword,
-Assist/TTS, timer/touch and real cold-boot acceptance remain required.
+GitHub prereleases cannot be latest. RC validation used separate normal GitHub
+test releases explicitly marked latest. Production 1.2.0 is a normal release
+marked latest; every version has immutable assets from one build. The direct
+Home Assistant installation path was hardware tested on one device. Bootstrap,
+settings retention, real cold boot and normal device functions were accepted
+on two devices. This does not claim every model pair or fault-injection case.

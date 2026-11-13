@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 — 2026-11-13
+
+- Final production release of hardware-accepted 1.2.0-rc.2; no functional code changes.
+- Home Assistant Managed Updates via GitHub releases/latest, shared generic factory/OTA images, and MAC-bound identity/network migration.
+- Direct HA installation validated on one device; bootstrap, wakeword/Assist/TTS, mute, timer/touch, real cold boot and sensitivity retention accepted on two devices.
+- Retain native ESPHome OTA, Improv Serial, five models/two slots, ADF/DC, VA-IDLE/TTS fix and local Voice-PE sounds.
+- Historical tags, releases and assets remain unchanged.
+
 ## Known good — ESPHome 2026.10.2 startup and sensitivity, 2026-11-12
 
 - User-confirmed working wakeword firmware on the installed devices.

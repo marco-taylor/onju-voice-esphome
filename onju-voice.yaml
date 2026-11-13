@@ -1,7 +1,7 @@
 substitutions:
   name: "onju-voice"
   friendly_name: "Onju Voice"
-  project_version: "1.2.0-rc.2"
+  project_version: "1.2.0"
   device_description: "Onju Voice Satellite with ESPHome software and microWakeWord"
   wakeup_sound_url: "flash://onju-wakeup.mp3" # Existing official Voice PE wake tone; unchanged bytes
   error_sound_url: "flash://onju-error.mp3" # Existing Tetele error tone, now embedded without audio changes

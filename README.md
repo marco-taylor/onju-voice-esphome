@@ -1,13 +1,13 @@
-# Onju Voice – Controlled Managed-Update RC
+# Onju Voice – 1.2.0
 
-Experimental test candidate based exactly on `06065b6c80fa5e88944add8415897251e0653885`
-(`known-good-2026-11-coldboot-20261112`). The known-good release remains unchanged.
-Managed-update hardware validation is pending; migrate only the explicitly approved
-first device. See [migration and test-channel design](./docs/MANAGED_UPDATES.md).
+Production release of the hardware-accepted `1.2.0-rc.2` functionality
+(source `78bf58dbcc1f1ece2daa4957776cb3608fc0d7fb`). Only release/version metadata
+changes from RC2. Historical known-good releases remain unchanged.
+See [managed-update and migration documentation](./docs/MANAGED_UPDATES.md).
 
 Hardware-tested firmware for the original ESP32-S3 Onju Voice PCB with 8 MB
 PSRAM, built with **ESPHome 2026.10.2 / ESP-IDF 5.5.6**. Distributed as a
-**development prerelease**, not v1.0/stable.
+**production release 1.2.0**.
 
 **HARDWARE TESTED:** Okay Nabu / slot 1 and Alexa / slot 2 concurrently; correct
 dual-pipeline routing, STT, conversation/intent, immediate TTS, media-player
@@ -60,12 +60,14 @@ again. The normal global 60-second preference policy remains unchanged. Other
 switch/model changes should be allowed to sync before hard power removal.
 
 Automated startup/restore/persistence, mute, TTS and timer tests pass. The user
-confirmed the current wakeword firmware works; this does not assert that every
-physical cold-boot/offline/model-pair test was individually performed.
+confirmed wakeword, Assist/TTS, mute, timer/touch, real cold boot and sensitivity
+retention on two devices. This does not claim every offline/model-pair test.
 
-**Managed Updates are experimental in this RC:** native HA firmware entity,
+**Home Assistant Managed Updates:** native HA firmware entity,
 GitHub-latest manifest, HTTPS OTA and a checked per-device identity/network profile.
-Native ESPHome OTA remains. Never install a generic image on a legacy private
+Direct Home Assistant installation was hardware tested; bootstrap and retention
+were also verified on a second device. Native ESPHome OTA remains. Never install
+a generic image on a legacy private
 node before its one-time migration has been confirmed. No automatic installation.
 
 ## Architecture

@@ -1,7 +1,7 @@
 substitutions:
   name: "onju-voice"
   friendly_name: "Onju Voice"
-  project_version: "1.2.0"
+  project_version: "1.3.0-wakenet.1"
   device_description: "Onju Voice Satellite with ESPHome software and microWakeWord"
   wakeup_sound_url: "flash://onju-wakeup.mp3" # Existing official Voice PE wake tone; unchanged bytes
   error_sound_url: "flash://onju-error.mp3" # Existing Tetele error tone, now embedded without audio changes
@@ -11,7 +11,7 @@ external_components:
   - source:
       type: local
       path: onju-voice-assets/tetele-production/components
-    components: [adf_pipeline, i2s_audio, microphone, micro_wake_word, voice_assistant, esp32_touch, onju_timer, onju_startup, onju_sensitivity, onju_http_compat, wifi, onju_identity, onju_update_metrics]
+    components: [adf_pipeline, i2s_audio, microphone, onju_wakenet, voice_assistant, esp32_touch, onju_timer, onju_startup, onju_http_compat, wifi, onju_identity, onju_update_metrics]
 
 esphome:
   name: "${name}"
@@ -211,27 +211,14 @@ media_player:
             }
             old_volume = new_volume;
 
-micro_wake_word:
-  id: mww
+onju_wakenet:
+  id: wakenet
   microphone:
-    id: mww_probe_source
+    id: wakenet_source
     microphone: onju_microphone
     gain_factor: 1
-  models:
-    - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/okay_nabu.json
-      id: okay_nabu
-    - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/hey_jarvis.json
-      id: hey_jarvis
-    - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/hey_mycroft.json
-      id: hey_mycroft
-    # Official experimental model; retain manifest cutoff/window/arena defaults.
-    - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/experiments/hey_home_assistant.json
-      id: hey_home_assistant
-    # Official stable v2 model; retain manifest cutoff/window/arena defaults.
-    - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/alexa.json
-      id: alexa
-  vad:
-    model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/vad.json
+  can_listen: !lambda return id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state() && !id(va).is_running();
+  on_enabled: !lambda id(onju_wakeword_startup).request_start("ha_alexa_enabled");
   on_wake_word_detected:
     - if:
         condition:
@@ -243,16 +230,16 @@ micro_wake_word:
               condition: media_player.is_playing
               then:
                 - media_player.pause
-          # Wait for the actual MWW task teardown AND physical microphone STOPPED.
+          # Wait for the actual WakeNet task teardown AND physical microphone STOPPED.
           - wait_until:
               condition:
-                lambda: return !id(mww).is_running() && id(onju_microphone).is_stopped();
+                lambda: return !id(wakenet).is_running() && id(onju_microphone).is_stopped();
               timeout: 10s
           - if:
               condition:
-                lambda: return !id(mww).is_running() && id(onju_microphone).is_stopped() && !id(va).is_running() && id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state();
+                lambda: return !id(wakenet).is_running() && id(onju_microphone).is_stopped() && !id(va).is_running() && id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state();
               then:
-                - logger.log: "HANDOVER MWW stopped; physical microphone STOPPED; release confirmed"
+                - logger.log: "HANDOVER WakeNet stopped; physical microphone STOPPED; release confirmed"
                 - if:
                     condition:
                       lambda: return id(onju_handover_with_tone);
@@ -262,7 +249,7 @@ micro_wake_word:
                       - delay: !lambda return static_cast<uint32_t>(id(assist_start_delay_setting).state);
                 - if:
                     condition:
-                      lambda: return !id(va).is_running() && !id(mww).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state();
+                      lambda: return !id(va).is_running() && !id(wakenet).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state();
                     then:
                       - logger.log: "HANDOVER released; optional configured delay elapsed -> VA START"
                       - if:
@@ -294,12 +281,12 @@ micro_wake_word:
 
 onju_startup:
   id: onju_wakeword_startup
-  mww: mww
+  wakenet: wakenet
   microphone: onju_microphone
   voice_assistant: va
   use_wake_word: use_wake_word
   hardware_mute: mute_switch
-  handover_idle: !lambda return !id(onju_wakeword_recover).is_running() && !id(mww).get_wake_word_detected_trigger()->is_action_running();
+  handover_idle: !lambda return !id(onju_wakeword_recover).is_running() && !id(wakenet).get_wake_word_detected_trigger()->is_action_running();
 
 onju_timer:
   id: onju_timers
@@ -320,7 +307,7 @@ onju_timer:
 
 voice_assistant:
   id: va
-  micro_wake_word: mww
+  wakenet: wakenet
   microphone: onju_microphone
   media_player: onju_out
   use_wake_word: false
@@ -415,7 +402,7 @@ voice_assistant:
             - binary_sensor.is_off: mute_switch
         then:
           - voice_assistant.stop:
-          - micro_wake_word.stop:
+          - onju_wakenet.stop:
           - lambda: id(onju_wakeword_startup).request_start("ha_disconnected");
   on_error:
     - media_player.play_media: "${error_sound_url}"
@@ -703,13 +690,13 @@ script:
     then:
       - wait_until:
           condition:
-            lambda: return !id(va).is_running() && !id(onju_wakeword_recover).is_running() && !id(mww).get_wake_word_detected_trigger()->is_action_running() && ((id(mww).is_detecting_wake_word() && id(onju_microphone).is_running()) || (!id(mww).is_running() && id(onju_microphone).is_stopped()));
+            lambda: return !id(va).is_running() && !id(onju_wakeword_recover).is_running() && !id(wakenet).get_wake_word_detected_trigger()->is_action_running() && ((id(wakenet).is_detecting_wake_word() && id(onju_microphone).is_running()) || (!id(wakenet).is_running() && id(onju_microphone).is_stopped()));
           timeout: 5s
       - if:
           condition:
-            lambda: return !id(onju_microphone).get_mute_state() && !id(va).is_running() && !id(onju_wakeword_recover).is_running() && !id(mww).get_wake_word_detected_trigger()->is_action_running() && !id(mww).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state;
+            lambda: return !id(onju_microphone).get_mute_state() && !id(va).is_running() && !id(onju_wakeword_recover).is_running() && !id(wakenet).get_wake_word_detected_trigger()->is_action_running() && !id(wakenet).is_running() && id(onju_microphone).is_stopped() && id(use_wake_word).state && !id(mute_switch).state;
           then:
-            - logger.log: "MUTE: unmute consumers released -> MWW START"
+            - logger.log: "MUTE: unmute consumers released -> WakeNet START"
             - lambda: id(onju_wakeword_startup).request_start("unmute");
       - script.execute: reset_led
 
@@ -724,9 +711,9 @@ script:
           args: ["reason.c_str()"]
       - if:
           condition:
-            lambda: return id(mww).is_running() && id(onju_microphone).is_running() && !id(va).is_running() && (id(onju_out).state != media_player::MEDIA_PLAYER_STATE_PLAYING);
+            lambda: return id(wakenet).is_running() && id(onju_microphone).is_running() && !id(va).is_running() && (id(onju_out).state != media_player::MEDIA_PLAYER_STATE_PLAYING);
           then:
-            - logger.log: "RECOVERY MWW already running; no duplicate start"
+            - logger.log: "RECOVERY WakeNet already running; no duplicate start"
           else:
             - wait_until:
                 condition:
@@ -751,15 +738,15 @@ script:
                   not:
                     voice_assistant.is_running:
                 then:
-                  - micro_wake_word.stop:
+                  - onju_wakenet.stop:
                   - wait_until:
                       condition:
                         not:
-                          micro_wake_word.is_running:
+                          lambda: return id(wakenet).is_running();
                       timeout: 5s
                   - if:
                       condition:
-                        lambda: return !id(mww).is_running() && !id(onju_microphone).is_stopped();
+                        lambda: return !id(wakenet).is_running() && !id(onju_microphone).is_stopped();
                       then:
                         - lambda: |-
                             ESP_LOGW("onju.handover", "RECOVERY stale microphone after consumers stopped; stopping");
@@ -770,14 +757,14 @@ script:
                       timeout: 5s
                   - if:
                       condition:
-                        lambda: return !id(va).is_running() && !id(mww).is_running() && id(onju_microphone).is_stopped() && (id(onju_out).state != media_player::MEDIA_PLAYER_STATE_PLAYING) && id(use_wake_word).state && !id(mute_switch).state;
+                        lambda: return !id(va).is_running() && !id(wakenet).is_running() && id(onju_microphone).is_stopped() && (id(onju_out).state != media_player::MEDIA_PLAYER_STATE_PLAYING) && id(use_wake_word).state && !id(mute_switch).state;
                       then:
-                        - logger.log: "RECOVERY consumers released -> MWW START"
-                        - micro_wake_word.start:
+                        - logger.log: "RECOVERY consumers released -> WakeNet START"
+                        - onju_wakenet.start:
                       else:
                         - logger.log:
                             level: ERROR
-                            format: "RECOVERY not safe/allowed to restart MWW; no forced restart"
+                            format: "RECOVERY not safe/allowed to restart WakeNet; no forced restart"
                 else:
                   - logger.log:
                       level: ERROR
@@ -890,7 +877,7 @@ script:
   - id: turn_off_wake_word
     then:
       - lambda: id(onju_wakeword_startup).cancel_start();
-      - micro_wake_word.stop
+      - onju_wakenet.stop
       - script.execute: reset_led
 
   - id: calibrate_touch
@@ -917,12 +904,12 @@ switch:
       - lambda: id(onju_wakeword_startup).cancel_start();
       - microphone.mute: onju_microphone
       - script.stop: onju_unmute_listen
-      - lambda: id(mww).get_wake_word_detected_trigger()->stop_action();
+      - lambda: id(wakenet).get_wake_word_detected_trigger()->stop_action();
       - script.stop: show_volume
       - lambda: id(onju_timers).set_volume_feedback(false);
       - script.execute: reset_led
       - lambda: |-
-          ESP_LOGI("onju.mute", "Mute ON: microphone muted=%s; MWW detecting=%s; playback untouched", id(onju_microphone).get_mute_state() ? "YES" : "NO", id(mww).is_detecting_wake_word() ? "YES" : "NO");
+          ESP_LOGI("onju.mute", "Mute ON: microphone muted=%s; WakeNet detecting=%s; playback untouched", id(onju_microphone).get_mute_state() ? "YES" : "NO", id(wakenet).is_detecting_wake_word() ? "YES" : "NO");
     turn_off_action:
       - if:
           condition:
@@ -981,34 +968,7 @@ switch:
       number: GPIO21
       inverted: True
 
-# Native HA Assist-Satellite owns model activation; sensitivity only.
-select:
-  - platform: onju_sensitivity
-    id: tetele_wake_word_sensitivity
-    name: "Wake word sensitivity"
-    # Versioned storage excludes legacy four-option indices without changing HA identity.
-    restore_value: true
-    initial_option: Moderately sensitive
-    entity_category: config
-    options:
-      - Slightly sensitive
-      - Moderately sensitive
-      - Very sensitive
-    on_value:
-      lambda: |-
-        // Official Okay Nabu v2 is NOT 20241226.3. Only its manifest default
-        // (0.97 -> uint8 247) is established here; no invented three-level table.
-        id(okay_nabu).set_probability_cutoff(247);
-        if (x == "Slightly sensitive") {
-          id(hey_jarvis).set_probability_cutoff(247);
-          id(hey_mycroft).set_probability_cutoff(253);
-        } else if (x == "Moderately sensitive") {
-          id(hey_jarvis).set_probability_cutoff(235);
-          id(hey_mycroft).set_probability_cutoff(242);
-        } else if (x == "Very sensitive") {
-          id(hey_jarvis).set_probability_cutoff(212);
-          id(hey_mycroft).set_probability_cutoff(237);
-        }
+# WakeNet uses the official Alexa model default; WakeNet sensitivity is not applicable.
 
 # Preserve established ADF HTTPS behavior; the updater itself uses verified TLS.
 onju_http_compat:
@@ -1023,16 +983,7 @@ http_request:
   buffer_size_rx: 4096
   buffer_size_tx: 4096
 
-update:
-  - platform: http_request
-    id: onju_firmware_update
-    name: Firmware
-    entity_category: config
-    device_class: firmware
-    http_request_id: firmware_http
-    ota_id: ota_http
-    source: https://github.com/marco-taylor/onju-voice-esphome/releases/latest/download/onju-voice.manifest.json
-    update_interval: 6h
+# Experimental image: no production manifest polling/update entity.
 
 onju_identity:
 

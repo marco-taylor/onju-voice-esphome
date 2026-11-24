@@ -1,7 +1,7 @@
 #pragma once
 #include "esphome/core/component.h"
 #include "esphome/core/log.h"
-#include "esphome/components/micro_wake_word/micro_wake_word.h"
+#include "esphome/components/onju_wakenet/onju_wakenet.h"
 #include "esphome/components/adf_pipeline/microphone/esp_adf_microphone.h"
 #include "esphome/components/voice_assistant/voice_assistant.h"
 #include "esphome/components/switch/switch.h"
@@ -10,7 +10,7 @@
 namespace esphome::onju_startup {
 class WakeWordStartup : public Component {
  public:
-  void set_mww(micro_wake_word::MicroWakeWord *p) { this->mww_ = p; }
+  void set_wakenet(onju_wakenet::WakeNet *p) { this->wakenet_ = p; }
   void set_microphone(esp_adf::ADFMicrophone *p) { this->mic_ = p; }
   void set_voice_assistant(voice_assistant::VoiceAssistant *p) { this->va_ = p; }
   void set_use_wake_word(switch_::Switch *p) { this->use_ = p; }
@@ -29,8 +29,8 @@ class WakeWordStartup : public Component {
     ESP_LOGI("onju.startup", "Local listening request: %s", reason);
   }
   void cancel_start() {
-    // OFF/mute can arrive between start() and the first MWW loop iteration.
-    if (this->armed_ && this->phase_ == OBSERVING && !this->mww_->is_running()) this->mww_->stop();
+    // OFF/mute can arrive between start() and the first WakeNet loop iteration.
+    if (this->armed_ && this->phase_ == OBSERVING && !this->wakenet_->is_running()) this->wakenet_->stop();
     this->armed_ = false;
     this->disable_loop();
   }
@@ -50,46 +50,46 @@ class WakeWordStartup : public Component {
       return;
     }
     if (this->phase_ == RELEASING) {
-      if (!this->mww_->is_running() && this->mic_->is_stopped()) this->phase_ = WAITING;
+      if (!this->wakenet_->is_running() && this->mic_->is_stopped()) this->phase_ = WAITING;
       else if (now - this->since_ > 10000) this->fail_("Microphone release timed out");
       return;
     }
     if (this->phase_ == WAITING) {
-      if (!this->mww_->is_ready() || !this->mic_->is_ready() || !this->va_->is_ready()) return;
-      if (!this->mww_->is_running() && !this->mic_->is_stopped()) return;
+      if (!this->wakenet_->is_ready() || !this->mic_->is_ready() || !this->va_->is_ready()) return;
+      if (!this->wakenet_->is_running() && !this->mic_->is_stopped()) return;
       if (this->attempts_ >= 2) { this->fail_("Listening did not become healthy after two attempts"); return; }
       ++this->attempts_;
-      this->audio_ = this->mww_->get_received_audio_bytes();
-      this->inferences_ = this->mww_->get_successful_inferences();
+      this->audio_ = this->wakenet_->get_received_audio_bytes();
+      this->inferences_ = this->wakenet_->get_successful_inferences();
       this->since_ = now;
       this->phase_ = OBSERVING;
-      if (!this->mww_->is_running()) this->mww_->start();  // MWW owns microphone startup.
+      if (!this->wakenet_->is_running()) this->wakenet_->start();  // WakeNet owns microphone startup.
       ESP_LOGI("onju.startup", "Listening check attempt %u/2", this->attempts_);
       return;
     }
-    if (this->mww_->is_detecting_wake_word() && this->mic_->is_running() &&
-        this->mww_->get_received_audio_bytes() != this->audio_ &&
-        this->mww_->get_successful_inferences() != this->inferences_) {
-      ESP_LOGI("onju.startup", "Listening healthy: MWW=DETECTING_WAKE_WORD microphone=RUNNING audio_bytes=%u wakeword_inferences=%u",
-               unsigned(this->mww_->get_received_audio_bytes()), unsigned(this->mww_->get_successful_inferences()));
+    if (this->wakenet_->is_detecting_wake_word() && this->mic_->is_running() &&
+        this->wakenet_->get_received_audio_bytes() != this->audio_ &&
+        this->wakenet_->get_successful_inferences() != this->inferences_) {
+      ESP_LOGI("onju.startup", "Listening healthy: WakeNet=DETECTING_WAKE_WORD microphone=RUNNING audio_bytes=%u wakeword_inferences=%u",
+               unsigned(this->wakenet_->get_received_audio_bytes()), unsigned(this->wakenet_->get_successful_inferences()));
       this->cancel_start();
     } else if (now - this->since_ > 15000) {
-      ESP_LOGW("onju.startup", "Listening check timed out; bounded MWW stop/retry");
-      this->mww_->stop();
+      ESP_LOGW("onju.startup", "Listening check timed out; bounded WakeNet stop/retry");
+      this->wakenet_->stop();
       this->phase_ = RELEASING;
       this->since_ = now;
     }
   }
   void dump_config() override {
-    ESP_LOGCONFIG("onju.startup", "Use Wake Word=%s; hardware mute=%s; microphone muted=%s; MWW detecting=%s; microphone running=%s; audio_bytes=%u; wakeword_inferences=%u",
+    ESP_LOGCONFIG("onju.startup", "Use Wake Word=%s; hardware mute=%s; microphone muted=%s; WakeNet detecting=%s; microphone running=%s; audio_bytes=%u; wakeword_inferences=%u",
       YESNO(this->use_->state), YESNO(this->mute_->state), YESNO(this->mic_->get_mute_state()),
-      YESNO(this->mww_->is_detecting_wake_word()), YESNO(this->mic_->is_running()),
-      unsigned(this->mww_->get_received_audio_bytes()), unsigned(this->mww_->get_successful_inferences()));
+      YESNO(this->wakenet_->is_detecting_wake_word()), YESNO(this->mic_->is_running()),
+      unsigned(this->wakenet_->get_received_audio_bytes()), unsigned(this->wakenet_->get_successful_inferences()));
   }
  protected:
   void fail_(const char *message) { ESP_LOGW("onju.startup", "%s; no further automatic attempts", message); this->cancel_start(); }
   enum Phase { WAITING, OBSERVING, RELEASING } phase_{WAITING};
-  micro_wake_word::MicroWakeWord *mww_;
+  onju_wakenet::WakeNet *wakenet_;
   esp_adf::ADFMicrophone *mic_;
   voice_assistant::VoiceAssistant *va_;
   switch_::Switch *use_;

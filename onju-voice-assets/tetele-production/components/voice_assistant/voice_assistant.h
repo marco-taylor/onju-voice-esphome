@@ -16,8 +16,8 @@
 #ifdef USE_MEDIA_PLAYER
 #include "esphome/components/media_player/media_player.h"
 #endif
-#ifdef USE_MICRO_WAKE_WORD
-#include "esphome/components/micro_wake_word/micro_wake_word.h"
+#ifdef USE_ONJU_WAKENET
+#include "esphome/components/onju_wakenet/onju_wakenet.h"
 #endif
 #ifdef USE_SPEAKER
 #include "esphome/components/speaker/speaker.h"
@@ -117,8 +117,8 @@ class VoiceAssistant final : public Component {
 
   void set_microphone_source(microphone::MicrophoneSource *mic_source) { this->mic_source_ = mic_source; }
   void set_microphone_source2(microphone::MicrophoneSource *mic_source2) { this->mic_source2_ = mic_source2; }
-#ifdef USE_MICRO_WAKE_WORD
-  void set_micro_wake_word(micro_wake_word::MicroWakeWord *mww) { this->micro_wake_word_ = mww; }
+#ifdef USE_ONJU_WAKENET
+  void set_wakenet(onju_wakenet::WakeNet *mww) { this->onju_wakenet_ = mww; }
 #endif
 #ifdef USE_SPEAKER
   void set_speaker(speaker::Speaker *speaker) {
@@ -342,8 +342,8 @@ class VoiceAssistant final : public Component {
 
   Configuration config_{};
 
-#ifdef USE_MICRO_WAKE_WORD
-  micro_wake_word::MicroWakeWord *micro_wake_word_{nullptr};
+#ifdef USE_ONJU_WAKENET
+  onju_wakenet::WakeNet *onju_wakenet_{nullptr};
 #endif
 };
 

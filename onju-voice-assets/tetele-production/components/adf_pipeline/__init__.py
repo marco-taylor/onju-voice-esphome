@@ -101,7 +101,7 @@ async def to_code(config):
     # (idf_component_tools.sources.git.GitSource -> prepare_ref(with_submodules=True)).
     # Do not patch the shared ESP-IDF installation via the old PlatformIO hook.
     adf_components = (
-        "audio_pipeline", "audio_sal", "esp-adf-libs", "esp-sr",
+        "audio_pipeline", "audio_sal", "esp-adf-libs",
         "dueros_service", "clouds", "audio_stream", "audio_board",
         "esp_peripherals", "audio_hal", "display_service", "esp_dispatcher",
         "esp_actions", "wifi_service", "audio_recorder", "tone_partition",
@@ -110,10 +110,13 @@ async def to_code(config):
     # Local directory dependencies are supported by ESPHome's current IDF manifest API.
     sdk_root = Path(__file__).resolve().parents[2] / "sdk" / "esp-adf"
     for component in adf_components:
-        component_path = sdk_root / "components" / component
+        # Only build lists differ: inactive legacy AFE wrappers are excluded.
+        component_path = (sdk_root.parent / "wakenet-adf" / component) if component in ("audio_stream", "audio_recorder") else (sdk_root / "components" / component)
         if not (component_path / "CMakeLists.txt").is_file():
             raise cv.Invalid(f"Missing pinned ADF component: {component_path}")
         add_idf_component(name=component, path=str(component_path))
+
+    # One consistent ESP-SR generation, supplied by onju_wakenet; no legacy esp-sr.
 
     # nghttp moved from ESP-IDF into the official component registry in IDF 5.x.
     add_idf_component(name="espressif/nghttp", ref="1.68.1")

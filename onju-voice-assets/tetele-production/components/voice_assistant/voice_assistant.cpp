@@ -1116,62 +1116,27 @@ void VoiceAssistant::on_announce(const api::VoiceAssistantAnnounceRequest &msg) 
 }
 
 void VoiceAssistant::on_set_configuration(const std::vector<std::string> &active_wake_words) {
-#ifdef USE_MICRO_WAKE_WORD
-  if (this->micro_wake_word_) {
-    // Disable all wake words first
-    for (auto &model : this->micro_wake_word_->get_wake_words()) {
-      model->disable();
-    }
-
-    // Enable only active wake words
-    size_t enabled_count = 0;
-    for (const auto &ww_id : active_wake_words) {
-      if (enabled_count >= 2)
-        break;
-      for (auto &model : this->micro_wake_word_->get_wake_words()) {
-        if (model->get_id() == ww_id && !model->is_enabled()) {
-          model->enable();
-          enabled_count++;
-          ESP_LOGD(TAG, "Enabled wake word: %s (id=%s)", model->get_wake_word().c_str(), model->get_id().c_str());
-        }
-      }
-    }
+#ifdef USE_ONJU_WAKENET
+  if (this->onju_wakenet_) {
+    bool enabled = std::find(active_wake_words.begin(), active_wake_words.end(), "alexa") != active_wake_words.end();
+    this->onju_wakenet_->set_enabled(enabled);
   }
 #endif
-};
+}
 
 const Configuration &VoiceAssistant::get_configuration() {
   this->config_.available_wake_words.clear();
   this->config_.active_wake_words.clear();
-
-#ifdef USE_MICRO_WAKE_WORD
-  if (this->micro_wake_word_) {
-    // Home Assistant owns two native pipeline/wake-word slots.
-    this->config_.max_active_wake_words = 2;
-
-    for (auto &model : this->micro_wake_word_->get_wake_words()) {
-      if (model->is_enabled()) {
-        this->config_.active_wake_words.push_back(model->get_id());
-      }
-
-      WakeWord wake_word;
-      wake_word.id = model->get_id();
-      wake_word.wake_word = model->get_wake_word();
-      for (const auto &lang : model->get_trained_languages()) {
-        wake_word.trained_languages.push_back(lang);
-      }
-      this->config_.available_wake_words.push_back(std::move(wake_word));
-    }
-  } else {
-#endif
-    // No microWakeWord
-    this->config_.max_active_wake_words = 0;
-#ifdef USE_MICRO_WAKE_WORD
+  this->config_.max_active_wake_words = 2;
+#ifdef USE_ONJU_WAKENET
+  if (this->onju_wakenet_) {
+    WakeWord word; word.id = "alexa"; word.wake_word = "Alexa"; word.trained_languages = {"en"};
+    this->config_.available_wake_words.push_back(std::move(word));
+    if (this->onju_wakenet_->is_enabled()) this->config_.active_wake_words.push_back("alexa");
   }
 #endif
-
   return this->config_;
-};
+}
 
 VoiceAssistant *global_voice_assistant = nullptr;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 

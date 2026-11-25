@@ -1,0 +1,5 @@
+idf_component_register(SRCS "main.c" "blob.S" REQUIRES esp-sr)
+if(NOT ONJU_TEST_BLOB)
+  set(ONJU_TEST_BLOB "${CMAKE_CURRENT_LIST_DIR}/../../../onju-voice-assets/tetele-production/sdk/esp-sr-wakenet/wakenet-two.bin")
+endif()
+target_compile_definitions(${COMPONENT_LIB} PRIVATE ONJU_NATIVE_BLOB_PATH="${ONJU_TEST_BLOB}")

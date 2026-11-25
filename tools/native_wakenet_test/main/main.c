@@ -9,7 +9,8 @@
 extern const unsigned char onju_native_blob[];
 void app_main(void) {
   srmodel_list_t *models=srmodel_load(onju_native_blob);
-  assert(models && models->num==2);
+  assert(models && (models->num==2 || models->num==3));
+  if(models->num==3) assert(strcmp(models->model_name[2],"nsnet2")==0);
   const char *names[]={"wn10_alexa","wn10_de_halloesp"};
   for(int i=0;i<2;i++) {
     assert(strcmp(models->model_name[i],names[i])==0);

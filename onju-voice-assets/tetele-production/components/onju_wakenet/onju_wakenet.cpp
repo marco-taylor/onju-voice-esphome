@@ -134,19 +134,21 @@ void WakeNet::worker(void*arg){
   if(self->stop_requested_.load()){self->diag("AFE_ERR_CANCELLED_BEFORE_INIT");goto cleanup;}
   models=srmodel_load(self->blob_);
   self->diag("AFE_START_02_MODEL_LOADER_RETURN",reinterpret_cast<intptr_t>(models));
-  if(!models||models->num!=2){self->diag("AFE_ERR_MODEL_LOADER",models?models->num:-1,true);goto cleanup;}
+  if(!models||models->num!=3){self->diag("AFE_ERR_MODEL_LOADER",models?models->num:-1,true);goto cleanup;}
   for(int i=0;i<2;i++){if(std::string(models->model_name[i])!=MODELS[i]){self->diag(i==0?"AFE_ERR_ALEXA_MODEL":"AFE_ERR_HALLOESP_MODEL",i,true);goto cleanup;}self->diag(i==0?"AFE_START_03_ALEXA_MODEL_FOUND":"AFE_START_04_HALLOESP_MODEL_FOUND",reinterpret_cast<intptr_t>(models->model_name[i]));}
+  if(std::string(models->model_name[2])!="nsnet2"){self->diag("AFE_ERR_NS_MODEL",2,true);goto cleanup;}
+  self->diag("AFE_NS_MODEL_FOUND",reinterpret_cast<intptr_t>(models->model_name[2]));
   self->diag("AFE_START_05_MODEL_METADATA_SLOTS_VALID",models->num);
   cfg=afe_config_init("M",models,AFE_TYPE_SR,AFE_MODE_LOW_COST);self->diag("AFE_START_06_AFE_CONFIG_RETURN",reinterpret_cast<intptr_t>(cfg));if(!cfg){self->diag("AFE_ERR_AFE_CONFIG",0,true);goto cleanup;}
   // Existing ADF/DC/gain delivers one 16-kHz s16 microphone; no playback reference exists.
-  cfg->aec_init=false;cfg->se_init=false;cfg->ns_init=false;cfg->vad_init=false;cfg->agc_init=false;
+  cfg->aec_init=false;cfg->se_init=false;cfg->ns_init=true;cfg->afe_ns_mode=AFE_NS_MODE_NET;cfg->ns_model_name=models->model_name[2];cfg->vad_init=false;cfg->agc_init=false;
   cfg->wakenet_init=true;cfg->wakenet_model_name=models->model_name[0];cfg->wakenet_model_name_2=models->model_name[1];
   cfg->wakenet_mode=DET_MODE_90;cfg->memory_alloc_mode=AFE_MEMORY_ALLOC_MORE_PSRAM;
   cfg->afe_linear_gain=1.0f;cfg->fixed_first_channel=true;cfg->fixed_output_channel=true;cfg->output_playback_channel=false;
   cfg->afe_ringbuf_size=16;cfg->debug_init=false;
   cfg=afe_config_check(cfg);
   if(cfg){self->diag("AFE_CONFIG_FLAGS",(cfg->aec_init?1:0)|(cfg->se_init?2:0)|(cfg->ns_init?4:0)|(cfg->vad_init?8:0)|(cfg->agc_init?16:0)|(cfg->wakenet_init?32:0));self->diag("AFE_INPUT_RATE",cfg->pcm_config.sample_rate);self->diag("AFE_INPUT_COUNTS",(cfg->pcm_config.mic_num<<16)|(cfg->pcm_config.ref_num<<8)|cfg->pcm_config.total_ch_num);}
-  if(!cfg || cfg->aec_init||cfg->se_init||cfg->ns_init||cfg->vad_init||cfg->agc_init||cfg->pcm_config.mic_num!=1||cfg->pcm_config.ref_num!=0||cfg->pcm_config.total_ch_num!=1||cfg->pcm_config.sample_rate!=16000){self->diag("AFE_ERR_INPUT_FORMAT",0,true);goto cleanup;}
+  if(!cfg || cfg->aec_init||cfg->se_init||!cfg->ns_init||cfg->afe_ns_mode!=AFE_NS_MODE_NET||!cfg->ns_model_name||std::string(cfg->ns_model_name)!="nsnet2"||cfg->vad_init||cfg->agc_init||cfg->pcm_config.mic_num!=1||cfg->pcm_config.ref_num!=0||cfg->pcm_config.total_ch_num!=1||cfg->pcm_config.sample_rate!=16000){self->diag("AFE_ERR_INPUT_FORMAT",0,true);goto cleanup;}
   self->diag("AFE_START_07_INPUT_FORMAT_VALID",cfg->pcm_config.total_ch_num);
   iface=esp_afe_handle_from_config(cfg);self->diag("AFE_INTERFACE_RETURN",reinterpret_cast<intptr_t>(iface));if(!iface){self->diag("AFE_ERR_AFE_INTERFACE",0,true);goto cleanup;}
   self->diag("AFE_START_09_AFE_CREATE_BEGIN",0,true);
@@ -155,6 +157,7 @@ void WakeNet::worker(void*arg){
   // Verify both native slots exist; a partially initialized AFE must not claim readiness.
   // Fresh-model defaults are retained, not replaced with application cutoffs.
   if(self->diag_result("AFE_NATIVE_SLOT_1",iface->reset_wakenet_threshold(data,1))!=1 || self->diag_result("AFE_NATIVE_SLOT_2",iface->reset_wakenet_threshold(data,2))!=1){self->diag("AFE_ERR_MODEL_SLOTS",0,true);goto cleanup;}
+  if(self->diag_result("AFE_NS_ENABLED_NATIVE",iface->enable_ns(data))!=1){self->diag("AFE_ERR_NS_ENABLE",0,true);goto cleanup;}
   // Both native configuration slots are used; no dynamic model registration.
   memory("AFE two WakeNet10 models loaded");
   self->feed_samples_=iface->get_feed_chunksize(data);
@@ -214,6 +217,6 @@ cleanup:
 }
 void WakeNet::dump_config(){
   dump_diag();
-  ESP_LOGCONFIG(TAG,"AFE WakeNet10 Alexa + Hallo ESP; blob=%u mask=%u listening=%s PCM=%u feed=%u fetch=%u detect=%u drops=%u fetch_wait_max_us=%u",unsigned(blob_size_),unsigned(active_mask_.load()),YESNO(is_detecting_wake_word()),unsigned(audio_bytes_.load()),unsigned(feeds_.load()),unsigned(inferences_.load()),unsigned(detections_.load()),unsigned(drops_.load()),unsigned(inference_max_us_.load()));
+  ESP_LOGCONFIG(TAG,"AFE WakeNet10 Alexa + Hallo ESP + NSNet2; blob=%u mask=%u listening=%s PCM=%u feed=%u fetch=%u detect=%u drops=%u fetch_wait_max_us=%u",unsigned(blob_size_),unsigned(active_mask_.load()),YESNO(is_detecting_wake_word()),unsigned(audio_bytes_.load()),unsigned(feeds_.load()),unsigned(inferences_.load()),unsigned(detections_.load()),unsigned(drops_.load()),unsigned(inference_max_us_.load()));
 }
 }

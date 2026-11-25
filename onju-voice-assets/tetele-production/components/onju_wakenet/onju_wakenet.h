@@ -13,6 +13,11 @@ class WakeNet final : public Component, public ota::OTAGlobalStateListener {
  public:
   inline static constexpr const char *WORD_IDS[2]={"alexa","hallo_esp"};
   inline static constexpr const char *PHRASES[2]={"Alexa","Hallo ESP"};
+  // Diagnostic-only bounded boot history; no lifecycle decisions use these fields.
+  void diag(const char *event, intptr_t native=0, bool heap=false);
+  int diag_result(const char *event,int value){diag(event,value);return value;}
+  void dump_diag();
+  bool diag_ready()const{return ready_.load();}
   void setup() override;void loop() override;void dump_config() override;
   void on_ota_global_state(ota::OTAState,float,uint8_t,ota::OTAComponent *) override;
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
@@ -31,6 +36,10 @@ class WakeNet final : public Component, public ota::OTAGlobalStateListener {
   uint32_t get_successful_inferences()const{return inferences_.load();}
   Trigger<std::string> *get_wake_word_detected_trigger(){return &detected_trigger_;}
  protected:
+  struct DiagEvent { const char *event; uint32_t ms; intptr_t native; uint32_t free,min,largest,psram; bool ready; std::atomic<bool> published{false}; };
+  DiagEvent diag_events_[64]{};
+  std::atomic<uint32_t> diag_count_{0};
+  std::atomic<bool> diag_mic_running_{false},diag_operational_{false};
   static void worker(void *arg);static void feeder(void *arg);
   enum State{STOPPED,STARTING,LISTENING,STOPPING}state_{STOPPED};
   const uint8_t *blob_{nullptr};size_t blob_size_{0};

@@ -34,6 +34,7 @@ inline size_t heap_caps_get_largest_free_block(int){return heap_largest;}
 inline void* heap_caps_malloc(size_t n,int caps){assert(caps&MALLOC_CAP_SPIRAM);allocs++;return std::malloc(n);}
 inline void heap_caps_free(void*p){std::free(p);}
 inline int64_t esp_timer_get_time(){return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
+inline uint32_t millis(){return uint32_t(esp_timer_get_time()/1000);}
 inline int esp_reset_reason(){return 1;}
 inline size_t heap_caps_get_minimum_free_size(int c){return heap_caps_get_free_size(c);}
 inline int pdMS_TO_TICKS(int x){return x;}
@@ -47,12 +48,12 @@ namespace esphome {
 namespace ota {enum OTAState {OTA_STARTED,OTA_ERROR};class OTAComponent{};struct OTAGlobalStateListener{virtual void on_ota_global_state(OTAState,float,uint8_t,OTAComponent*)=0;};struct Callback{void add_global_state_listener(OTAGlobalStateListener*){}};inline Callback cb;inline Callback*get_global_ota_callback(){return &cb;}}
 namespace setup_priority{constexpr float AFTER_WIFI=200;}
 class Component{public:bool ready=true,failed=false;virtual void setup(){}virtual void loop(){}virtual void dump_config(){}virtual float get_setup_priority()const{return 0;}bool is_ready()const{return ready;}bool is_failed()const{return failed;}void mark_failed(){failed=true;}void status_momentary_error(const char*,int){}};
-class StaticTask{std::thread t;public:bool create(void(*f)(void*),const char*,int,void*p,int,bool){assert(!t.joinable());t=std::thread(f,p);return true;}bool deallocate(){if(!can_deallocate)return false;if(t.joinable())t.join();return true;}};
+class StaticTask{std::thread t;public:void* get_handle(){return this;}bool create(void(*f)(void*),const char*,int,void*p,int,bool){assert(!t.joinable());t=std::thread(f,p);return true;}bool deallocate(){if(!can_deallocate)return false;if(t.joinable())t.join();return true;}};
 inline std::map<uint32_t,uint8_t> stored;inline int saves=0;struct ESPPreferenceObject{uint32_t key=0;template<typename T>bool load(T*p){if(!stored.count(key))return false;*p=stored[key];return true;}template<typename T>bool save(T*p){stored[key]=*p;saves++;return true;}};
 struct Pref{template<typename T>ESPPreferenceObject make_preference(uint32_t key,bool){return {key};}};inline Pref prefs;inline Pref*global_preferences=&prefs;
 template<typename...Ts>struct Trigger{int calls=0;std::string last;void trigger(Ts...v){calls++;last=std::get<0>(std::make_tuple(v...));}};
 template<typename...Ts>struct Action{virtual void play(const Ts &...)=0;};
-namespace microphone{struct Info{int get_sample_rate(){return 16000;}int get_bits_per_sample(){return 16;}int get_channels(){return 1;}};class MicrophoneSource{public:bool muted=false;int starts=0,stops=0;std::function<void(const std::vector<uint8_t>&)> cb;Info get_audio_stream_info(){return {};}bool is_muted(){return muted;}void start(){starts++;}void stop(){stops++;}template<typename F>void add_data_callback(F f){cb=f;}};}
+namespace microphone{struct Info{int get_sample_rate(){return 16000;}int get_bits_per_sample(){return 16;}int get_channels(){return 1;}};class MicrophoneSource{public:bool muted=false;int starts=0,stops=0;std::function<void(const std::vector<uint8_t>&)> cb;Info get_audio_stream_info(){return {};}bool is_muted(){return muted;}bool is_running(){return starts>stops;}void start(){starts++;}void stop(){stops++;}template<typename F>void add_data_callback(F f){cb=f;}};}
 namespace ring_buffer{class RingBuffer{std::mutex m;std::vector<uint8_t>d;size_t cap;public:explicit RingBuffer(size_t n):cap(n){}static std::shared_ptr<RingBuffer>create(size_t n){return std::make_shared<RingBuffer>(n);}size_t available(){std::lock_guard<std::mutex>l(m);return d.size();}size_t free(){std::lock_guard<std::mutex>l(m);return cap-d.size();}void reset(){std::lock_guard<std::mutex>l(m);d.clear();}size_t write(void*p,size_t n){std::lock_guard<std::mutex>l(m);auto*b=(uint8_t*)p;d.insert(d.end(),b,b+n);return n;}size_t read(void*p,size_t n,int){std::lock_guard<std::mutex>l(m);n=std::min(n,d.size());memcpy(p,d.data(),n);d.erase(d.begin(),d.begin()+n);return n;}};}
 }
 struct srmodel_list_t{int num;char**model_name;};struct esp_afe_sr_data_t{};

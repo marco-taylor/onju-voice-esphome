@@ -21,6 +21,7 @@ class WakeWordStartup : public Component {
   void request_start(const char *reason) {
     // Called before TemplateSwitch optimistic publish as well: evaluate only later, in loop().
     if (this->armed_) return;
+    this->wakenet_->diag("STARTUP_REQUEST");
     this->armed_ = true;
     this->attempts_ = 0;
     this->phase_ = WAITING;
@@ -46,6 +47,7 @@ class WakeWordStartup : public Component {
     if (now - this->began_ > 45000) { this->fail_("Startup deadline reached"); return; }
     // Never interfere with the known-good VA handover/recovery path.
     if (this->va_->is_running() || !this->handover_idle_()) {
+      if(diag_gate_!=1){diag_gate_=1;wakenet_->diag("STARTUP_WAIT_VA_OR_HANDOVER");}
       this->phase_ = WAITING;
       return;
     }
@@ -55,10 +57,10 @@ class WakeWordStartup : public Component {
       return;
     }
     if (this->phase_ == WAITING) {
-      if (!this->wakenet_->is_ready() || !this->mic_->is_ready() || !this->va_->is_ready()) return;
-      if (!this->wakenet_->is_running() && !this->mic_->is_stopped()) return;
+      if (!this->wakenet_->is_ready() || !this->mic_->is_ready() || !this->va_->is_ready()) {if(diag_gate_!=2){diag_gate_=2;wakenet_->diag("STARTUP_WAIT_COMPONENT",(!wakenet_->is_ready()?1:0)|(!mic_->is_ready()?2:0)|(!va_->is_ready()?4:0));}return;}
+      if (!this->wakenet_->is_running() && !this->mic_->is_stopped()) {if(diag_gate_!=3){diag_gate_=3;wakenet_->diag("STARTUP_WAIT_MIC_STOPPED");}return;}
       if (this->attempts_ >= 2) { this->fail_("Listening did not become healthy after two attempts"); return; }
-      ++this->attempts_;
+      ++this->attempts_;this->wakenet_->diag(this->attempts_==1?"RETRY_ATTEMPT_1_BEGIN":"RETRY_ATTEMPT_2_BEGIN");
       this->audio_ = this->wakenet_->get_received_audio_bytes();
       this->inferences_ = this->wakenet_->get_successful_inferences();
       this->since_ = now;
@@ -72,22 +74,23 @@ class WakeWordStartup : public Component {
         this->wakenet_->get_successful_inferences() != this->inferences_) {
       ESP_LOGI("onju.startup", "Listening healthy: WakeNet=DETECTING_WAKE_WORD microphone=RUNNING audio_bytes=%u wakeword_inferences=%u",
                unsigned(this->wakenet_->get_received_audio_bytes()), unsigned(this->wakenet_->get_successful_inferences()));
-      this->cancel_start();
+      this->wakenet_->diag("RETRY_RESULT_HEALTHY",this->attempts_);this->cancel_start();
     } else if (now - this->since_ > 15000) {
       ESP_LOGW("onju.startup", "Listening check timed out; bounded WakeNet stop/retry");
-      this->wakenet_->stop();
+      this->wakenet_->diag("RETRY_OBSERVATION_TIMEOUT",this->attempts_);this->wakenet_->stop();
       this->phase_ = RELEASING;
       this->since_ = now;
     }
   }
   void dump_config() override {
+    ESP_LOGCONFIG("onju.startup","DIAG armed=%d phase=%d attempts=%u age_ms=%u ready=%d",armed_,int(phase_),unsigned(attempts_),unsigned(millis()-began_),wakenet_->diag_ready());
     ESP_LOGCONFIG("onju.startup", "Use Wake Word=%s; hardware mute=%s; microphone muted=%s; WakeNet detecting=%s; microphone running=%s; audio_bytes=%u; wakeword_inferences=%u",
       YESNO(this->use_->state), YESNO(this->mute_->state), YESNO(this->mic_->get_mute_state()),
       YESNO(this->wakenet_->is_detecting_wake_word()), YESNO(this->mic_->is_running()),
       unsigned(this->wakenet_->get_received_audio_bytes()), unsigned(this->wakenet_->get_successful_inferences()));
   }
  protected:
-  void fail_(const char *message) { ESP_LOGW("onju.startup", "%s; no further automatic attempts", message); this->cancel_start(); }
+  void fail_(const char *message) { this->wakenet_->diag("RETRY_FINAL_ABORT",this->attempts_,true);ESP_LOGW("onju.startup", "%s; no further automatic attempts", message); this->cancel_start(); }
   enum Phase { WAITING, OBSERVING, RELEASING } phase_{WAITING};
   onju_wakenet::WakeNet *wakenet_;
   esp_adf::ADFMicrophone *mic_;
@@ -95,6 +98,7 @@ class WakeWordStartup : public Component {
   switch_::Switch *use_;
   binary_sensor::BinarySensor *mute_;
   std::function<bool()> handover_idle_;
+  uint8_t diag_gate_{0};
   bool armed_{false};
   uint8_t attempts_{0};
   uint32_t since_{0}, began_{0}, audio_{0}, inferences_{0};

@@ -1118,8 +1118,7 @@ void VoiceAssistant::on_announce(const api::VoiceAssistantAnnounceRequest &msg) 
 void VoiceAssistant::on_set_configuration(const std::vector<std::string> &active_wake_words) {
 #ifdef USE_ONJU_WAKENET
   if (this->onju_wakenet_) {
-    bool enabled = std::find(active_wake_words.begin(), active_wake_words.end(), "alexa") != active_wake_words.end();
-    this->onju_wakenet_->set_enabled(enabled);
+    this->onju_wakenet_->set_active_words(active_wake_words);
   }
 #endif
 }
@@ -1130,9 +1129,12 @@ const Configuration &VoiceAssistant::get_configuration() {
   this->config_.max_active_wake_words = 2;
 #ifdef USE_ONJU_WAKENET
   if (this->onju_wakenet_) {
-    WakeWord word; word.id = "alexa"; word.wake_word = "Alexa"; word.trained_languages = {"en"};
-    this->config_.available_wake_words.push_back(std::move(word));
-    if (this->onju_wakenet_->is_enabled()) this->config_.active_wake_words.push_back("alexa");
+    for (size_t i=0;i<3;i++) {
+      WakeWord word; word.id=onju_wakenet::WakeNet::WORD_IDS[i];
+      word.wake_word=onju_wakenet::WakeNet::PHRASES[i];word.trained_languages={i==1?"de":"en"};
+      this->config_.available_wake_words.push_back(std::move(word));
+      if(this->onju_wakenet_->word_enabled(i)) this->config_.active_wake_words.push_back(onju_wakenet::WakeNet::WORD_IDS[i]);
+    }
   }
 #endif
   return this->config_;

@@ -54,3 +54,9 @@ firmware image.
 The older full-duplex `esp_audio_stack` / `esp_aec` / `proxy_speaker` components
 are no longer part of the active source tree. Historical upstream sources and
 attributions remain available through Git history and `docs/UPSTREAM_README.md`.
+
+## Experimental AFE candidate (this branch only)
+
+Active recognition uses Espressif ESP-SR 2.6.2 at commit `bb552f1a559396a17681299cb3e199a0f1a4520a`: `wn10_alexa`, `wn10_de_halloesp`, `wn9_jarvis_tts`. The microWakeWord row above describes the production baseline; its code/models are absent from this experimental image. Models and libraries are downloaded from the pinned official repository by ./tools/bootstrap_wakenet.py. Eleven model files are hash-verified. No Mycroft model is packaged.
+
+The Espressif license is reproduced in ./docs/ESP_SR_LICENSE.txt. Retain notices; use is limited to Espressif products. Separate trademark rights are not granted. Voice-PE sound attribution remains unchanged. This branch has no production update feed or public release.

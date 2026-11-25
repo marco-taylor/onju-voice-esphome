@@ -1,8 +1,8 @@
 substitutions:
   name: "onju-voice"
   friendly_name: "Onju Voice"
-  project_version: "1.3.0-wakenet.1"
-  device_description: "Onju Voice Satellite with ESPHome software and microWakeWord"
+  project_version: "1.3.0-wakenet10-afe.1"
+  device_description: "Experimental Onju Voice with ESP-SR AFE and WakeNet"
   wakeup_sound_url: "flash://onju-wakeup.mp3" # Existing official Voice PE wake tone; unchanged bytes
   error_sound_url: "flash://onju-error.mp3" # Existing Tetele error tone, now embedded without audio changes
   timer_finished_sound_url: "flash://onju-timer.mp3" # Voice PE timer_finished, locally converted to MP3
@@ -218,7 +218,7 @@ onju_wakenet:
     microphone: onju_microphone
     gain_factor: 1
   can_listen: !lambda return id(use_wake_word).state && !id(mute_switch).state && !id(onju_microphone).get_mute_state() && !id(va).is_running();
-  on_enabled: !lambda id(onju_wakeword_startup).request_start("ha_alexa_enabled");
+  on_enabled: !lambda id(onju_wakeword_startup).request_start("ha_wakeword_selection");
   on_wake_word_detected:
     - if:
         condition:

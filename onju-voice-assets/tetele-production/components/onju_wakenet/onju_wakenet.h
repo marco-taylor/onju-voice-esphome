@@ -11,8 +11,8 @@
 namespace esphome::onju_wakenet {
 class WakeNet final : public Component, public ota::OTAGlobalStateListener {
  public:
-  inline static constexpr const char *WORD_IDS[3]={"alexa","hallo_esp","jarvis"};
-  inline static constexpr const char *PHRASES[3]={"Alexa","Hallo ESP","Jarvis"};
+  inline static constexpr const char *WORD_IDS[2]={"alexa","hallo_esp"};
+  inline static constexpr const char *PHRASES[2]={"Alexa","Hallo ESP"};
   void setup() override;void loop() override;void dump_config() override;
   void on_ota_global_state(ota::OTAState,float,uint8_t,ota::OTAComponent *) override;
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
@@ -22,7 +22,7 @@ class WakeNet final : public Component, public ota::OTAGlobalStateListener {
   void set_on_enabled(std::function<void()> fn){on_enabled_=std::move(fn);}
   void set_active_words(const std::vector<std::string> &words);
   void set_enabled(bool enabled){set_active_words(enabled?std::vector<std::string>{"alexa"}:std::vector<std::string>{});}
-  bool word_enabled(size_t index)const{return index<3 && (active_mask_.load()&(1U<<index));}
+  bool word_enabled(size_t index)const{return index<2 && (active_mask_.load()&(1U<<index));}
   bool is_enabled()const{return active_mask_.load()!=0;}
   void start();void stop();
   bool is_running()const{return state_!=STOPPED;}

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Prepare one pinned ESP-SR checkout and one aligned, in-Application three-model blob.
+"""Prepare one pinned ESP-SR checkout and one aligned, in-Application two-model blob.
 Does not build, contact a device or change the baseline ADF SDK.
 """
 from pathlib import Path
 import argparse,hashlib,json,shutil,struct,subprocess
 ROOT=Path(__file__).resolve().parents[1]
 REV='bb552f1a559396a17681299cb3e199a0f1a4520a'
-MODELS=['wn10_alexa','wn10_de_halloesp','wn9_jarvis_tts']
+MODELS=['wn10_alexa','wn10_de_halloesp']
 TARGET=ROOT/'onju-voice-assets/tetele-production/sdk/esp-sr-wakenet/esp-sr'
 def git(*args,cwd=None):return subprocess.check_output(['git',*args],cwd=cwd,text=True).strip()
 def pack(directories):
@@ -38,9 +38,9 @@ if __name__=='__main__':
  directories={n:TARGET/'model/wakenet_model'/n for n in MODELS}
  for n,d in directories.items():
   assert d.is_dir(),n
- expected={"wn10_alexa/_MODEL_INFO_p1":"21e6a3544c58b770981d4fd8153c06ace8a99795f701e12647ce32f9d86fe66a","wn10_alexa/_MODEL_INFO_p2":"bad88074818c5fbef750a7f3e223ff226e6da544cadbeefcc50d23b95906620d","wn10_alexa/wn10_data_p1":"ddd8bb15b8fe95adcaecfcef66eb67dc35d9d2f1133b0bcd9d8b9a890128227c","wn10_alexa/wn10_data_p2":"534d0f56c4f3ee61e65495762b9c6333357d2433167568b20746879b1829c3a9","wn10_de_halloesp/_MODEL_INFO_p1":"58d2617ae1e1625fcb5307bc704d453c81efe0ae216752a36aa1a1c571c3d904","wn10_de_halloesp/_MODEL_INFO_p2":"8de149c71d0e0a49f0324ad72416084a9131ffb50a3be75fd73b9817c9fba998","wn10_de_halloesp/wn10_data_p1":"1d723b8267ad1b7fb4111c2a864220c07df33dc211b1768feb4aa46539f1dcfa","wn10_de_halloesp/wn10_data_p2":"223bf433548dc062dc296a96465668982d5987943fd528f7b37b0dc3e16edb86","wn9_jarvis_tts/_MODEL_INFO_":"ee752fe7bd3eaa78b94e723a4782c2000014508848a53e31222ebe52be2d7970","wn9_jarvis_tts/wn9_data":"221e5d90fb5ce2d14e851f4c9affc0271c5b02e55a10deb671a4243d3ccdcc3f","wn9_jarvis_tts/wn9_index":"c5557ca5d1ec6943540a6abbb3ea235a693f4637369f92e873ff566b73a61cfd"}
+ expected={"wn10_alexa/_MODEL_INFO_p1":"21e6a3544c58b770981d4fd8153c06ace8a99795f701e12647ce32f9d86fe66a","wn10_alexa/_MODEL_INFO_p2":"bad88074818c5fbef750a7f3e223ff226e6da544cadbeefcc50d23b95906620d","wn10_alexa/wn10_data_p1":"ddd8bb15b8fe95adcaecfcef66eb67dc35d9d2f1133b0bcd9d8b9a890128227c","wn10_alexa/wn10_data_p2":"534d0f56c4f3ee61e65495762b9c6333357d2433167568b20746879b1829c3a9","wn10_de_halloesp/_MODEL_INFO_p1":"58d2617ae1e1625fcb5307bc704d453c81efe0ae216752a36aa1a1c571c3d904","wn10_de_halloesp/_MODEL_INFO_p2":"8de149c71d0e0a49f0324ad72416084a9131ffb50a3be75fd73b9817c9fba998","wn10_de_halloesp/wn10_data_p1":"1d723b8267ad1b7fb4111c2a864220c07df33dc211b1768feb4aa46539f1dcfa","wn10_de_halloesp/wn10_data_p2":"223bf433548dc062dc296a96465668982d5987943fd528f7b37b0dc3e16edb86"}
  for key,digest in expected.items():
   assert hashlib.sha256((TARGET/'model/wakenet_model'/key).read_bytes()).hexdigest()==digest,key+' differs from pinned official model'
- data,entries=pack(directories);out=TARGET.parent/'wakenet-three.bin';out.write_bytes(data)
+ data,entries=pack(directories);out=TARGET.parent/'wakenet-two.bin';out.write_bytes(data)
  info={'esp_sr_commit':REV,'models':MODELS,'blob_size':len(data),'blob_sha256':hashlib.sha256(data).hexdigest(),'files':entries,'alignment':16,'license':'ESPRESSIF MIT; Espressif products only; retain notices; trademark rights separate'}
  (TARGET.parent/'wakenet-model.json').write_text(json.dumps(info,indent=2)+'\n');print(json.dumps(info,indent=2))

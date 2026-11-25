@@ -1129,7 +1129,7 @@ const Configuration &VoiceAssistant::get_configuration() {
   this->config_.max_active_wake_words = 2;
 #ifdef USE_ONJU_WAKENET
   if (this->onju_wakenet_) {
-    for (size_t i=0;i<3;i++) {
+    for (size_t i=0;i<2;i++) {
       WakeWord word; word.id=onju_wakenet::WakeNet::WORD_IDS[i];
       word.wake_word=onju_wakenet::WakeNet::PHRASES[i];word.trained_languages={i==1?"de":"en"};
       this->config_.available_wake_words.push_back(std::move(word));

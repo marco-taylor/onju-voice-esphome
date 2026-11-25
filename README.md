@@ -1,4 +1,4 @@
-# Onju Voice — experimental AFE / three-model WakeNet candidate
+# Onju Voice — experimental AFE / two-model WakeNet candidate
 
 Isolated from production v1.2.0 (`133cd1024a7a53551fb4367be7ed44216d9c7b2e`).
 This branch is **not production firmware** and has no update-feed entity.
@@ -7,7 +7,7 @@ on the separate `experiment/wakenet` branch at
 `a972d6f8cba5f96d61024ce04134e24408f74b09`.
 
 Source of truth: [./onju-voice.yaml](./onju-voice.yaml).
-ESPHome **2026.10.2**, project **1.3.0-wakenet10-afe.1**.
+ESPHome **2026.10.2**, project **1.3.0-wakenet10-afe.2**.
 
 ## Architecture
 
@@ -17,25 +17,28 @@ The existing Onju 16-kHz / 32-bit LEFT I2S → ADF → DC correction → runtime
 path supplies signed 16-bit mono PCM to one AFE (`M`, speech recognition,
 low-cost mode). There is no second microphone reader or direct detector.
 
-Exactly three models are packaged in one 16-byte-aligned Application blob:
+Exactly two models are packaged in one 16-byte-aligned Application blob:
 
 1. `wn10_alexa` — Alexa; native AFE model ID 1.
 2. `wn10_de_halloesp` — Hallo ESP; ID 2.
-3. `wn9_jarvis_tts` — Jarvis, **not Hey Jarvis**; ID 3.
 
-Two models are configured during AFE creation; the native third-model API is
-called once and must return 3. No SDK patch or fourth registration is used.
+Both native AFE configuration slots are used. No dynamic model registration,
+third-model adapter, Jarvis weights or WakeNet9 model is included. No SDK patch.
 VAD, NS, AEC, AGC and SE are deliberately disabled for this first candidate.
 No playback reference exists. Duplex I2S does not constitute AEC.
 
-All three models are loaded/inferred by the AFE when listening. The existing
-**two native HA pipeline slots** remain the routing authority: all three
-wakewords are available in the catalog, but at most two can be selected for
-Assist. A detection from an unselected model is logged and ignored. Each word
-can be assigned to either slot in HA; there is no implicit third-word fallback
-and no third pipeline. The selection mask is persistent and migrates the old
-Alexa enable preference. An explicit later design decision is needed if all
-three must trigger Assist simultaneously through only two native HA slots.
+Both WakeNet10 models are loaded by the AFE when listening. The existing two
+native HA pipeline slots remain the routing authority. Intended configuration:
+**Alexa → slot 1; Hallo ESP → slot 2**. The catalog and detected phrases preserve
+that order; HA owns the actual pipeline IDs. There is no third routing layer.
+Each selected model can trigger the existing Assist path. The persistent
+two-bit selection migrates the earlier experimental mask/Alexa boolean without
+changing Mute or Use Wake Word preferences.
+
+The unmodified vendor generic selector can keep WN9-family kernel/interface
+code linked even though no WN9 model is embedded or initialized. This is audited
+in the link map; it is not represented as a WN9-free executable. Removing vendor
+selector branches would require an SDK modification, which is not done.
 
 Mute/OFF/VA ownership, bounded startup recovery, physical microphone release
 before VA, local sounds and VA-IDLE-based TTS recovery are retained.
@@ -68,7 +71,7 @@ docker run --rm -v "$PWD":/config \
   ghcr.io/esphome/esphome:2026.10.2 compile /config/onju-voice.yaml
 ```
 
-The bootstrap verifies the eleven exact official model-file hashes. The
+The bootstrap verifies the eight exact official model-file hashes. The
 Application blob needs no model partition; the existing flash layout is retained.
 Existing ADF CMake overlays still exclude unused legacy SR wrappers, with the
 active ADF/I2S/microphone/player implementations unchanged.
@@ -84,14 +87,14 @@ docker run --rm --entrypoint python3 -v "$PWD":/config \
 
 The lifecycle test compiles the actual consumer with threaded RTOS/AFE/heap
 mocks and ASan/UBSan. The blob test executes the actual official loader with
-ASan/UBSan and checks three model directories, bounds and alignment. Neither
+ASan/UBSan and checks two model directories, bounds and alignment. Neither
 executes Espressif's Xtensa DSP. The older feasibility script and single-engine
 report are historical evidence, not acceptance tests for this AFE architecture.
 
-Clean build/link and host tests pass. Runtime initialization of all three
+Clean build/link and host tests pass. Runtime initialization of both
 models, heap/PSRAM peaks, real detection, VA/TTS and repeated physical cold boots
 remain hardware tests requiring separate authorization. See
-[./docs/experiments/wakenet/AFE_THREE_MODELS.md](./docs/experiments/wakenet/AFE_THREE_MODELS.md).
+[./docs/experiments/wakenet/AFE_TWO_MODELS.md](./docs/experiments/wakenet/AFE_TWO_MODELS.md).
 
 ## Licensing
 

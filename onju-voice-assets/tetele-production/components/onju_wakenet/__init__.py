@@ -14,7 +14,7 @@ StartAction=ns.class_('StartAction',automation.Action);StopAction=ns.class_('Sto
 CONFIG_SCHEMA=cv.All(cv.Schema({cv.GenerateID():cv.declare_id(WakeNet),cv.Required(CONF_MICROPHONE):microphone.microphone_source_schema(min_bits_per_sample=16,max_bits_per_sample=16,min_channels=1,max_channels=1),cv.Required('can_listen'):cv.returning_lambda,cv.Required('on_enabled'):cv.lambda_,cv.Optional(CONF_ON_WAKE_WORD_DETECTED):automation.validate_automation(single=True)}).extend(cv.COMPONENT_SCHEMA),cv.only_on_esp32,cv.only_with_framework('esp-idf'))
 FINAL_VALIDATE_SCHEMA=cv.Schema({cv.Required(CONF_MICROPHONE):microphone.final_validate_microphone_source_schema('onju_wakenet',sample_rate=16000)},extra=cv.ALLOW_EXTRA)
 async def to_code(config):
- root=Path(__file__).resolve().parents[2];sdk=root/'sdk'/'esp-sr-wakenet';sr=sdk/'esp-sr';blob=sdk/'wakenet-three.bin'
+ root=Path(__file__).resolve().parents[2];sdk=root/'sdk'/'esp-sr-wakenet';sr=sdk/'esp-sr';blob=sdk/'wakenet-two.bin'
  if not blob.is_file() or not (sr/'CMakeLists.txt').is_file():raise cv.Invalid('Run tools/bootstrap_wakenet.py first')
  meta=json.loads((sdk/'wakenet-model.json').read_text());data=blob.read_bytes()
  if meta['esp_sr_commit']!='bb552f1a559396a17681299cb3e199a0f1a4520a' or hashlib.sha256(data).hexdigest()!=meta['blob_sha256']:raise cv.Invalid('Pinned WakeNet blob integrity failure')
@@ -24,9 +24,9 @@ async def to_code(config):
   esp32.add_idf_component(name=name,ref=version)
  ota.request_ota_state_listeners()
  cg.add_define('USE_ONJU_WAKENET')
- cg.add_global(cg.RawStatement('alignas(16) static const uint8_t onju_wakenet_three_blob[] = {'+','.join(f'0x{x:02x}' for x in data)+'};'))
+ cg.add_global(cg.RawStatement('alignas(16) static const uint8_t onju_wakenet_two_blob[] = {'+','.join(f'0x{x:02x}' for x in data)+'};'))
  var=cg.new_Pvariable(config[CONF_ID]);await cg.register_component(var,config)
- cg.add(var.set_model_blob(cg.RawExpression('onju_wakenet_three_blob'),len(data)))
+ cg.add(var.set_model_blob(cg.RawExpression('onju_wakenet_two_blob'),len(data)))
  cg.add(var.set_microphone_source(await microphone.microphone_source_to_code(config[CONF_MICROPHONE])))
  cg.add(var.set_can_listen(await cg.process_lambda(config['can_listen'],[],return_type=cg.bool_)))
  cg.add(var.set_on_enabled(await cg.process_lambda(config['on_enabled'],[],return_type=cg.void)))

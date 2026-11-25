@@ -57,6 +57,6 @@ attributions remain available through Git history and `docs/UPSTREAM_README.md`.
 
 ## Experimental AFE candidate (this branch only)
 
-Active recognition uses Espressif ESP-SR 2.6.2 at commit `bb552f1a559396a17681299cb3e199a0f1a4520a`: `wn10_alexa`, `wn10_de_halloesp`, `wn9_jarvis_tts`. The microWakeWord row above describes the production baseline; its code/models are absent from this experimental image. Models and libraries are downloaded from the pinned official repository by ./tools/bootstrap_wakenet.py. Eleven model files are hash-verified. No Mycroft model is packaged.
+Active recognition uses Espressif ESP-SR 2.6.2 at commit `bb552f1a559396a17681299cb3e199a0f1a4520a`: `wn10_alexa`, `wn10_de_halloesp`. The microWakeWord row above describes the production baseline; its code/models are absent from this experimental image. Models and libraries are downloaded from the pinned official repository by ./tools/bootstrap_wakenet.py. Eight model files are hash-verified. No Jarvis, Mycroft or other WN9 model is packaged. Vendor generic dispatch still retains WN9-family kernel/interface code; no WN9 inference instance is created.
 
 The Espressif license is reproduced in ./docs/ESP_SR_LICENSE.txt. Retain notices; use is limited to Espressif products. Separate trademark rights are not granted. Voice-PE sound attribution remains unchanged. This branch has no production update feed or public release.

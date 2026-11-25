@@ -12,7 +12,7 @@ extern "C" {
 }
 namespace esphome::onju_wakenet {
 static const char *const TAG="onju.wakenet";
-static const char *const MODELS[3]={"wn10_alexa","wn10_de_halloesp","wn9_jarvis_tts"};
+static const char *const MODELS[2]={"wn10_alexa","wn10_de_halloesp"};
 static void memory(const char *stage){
   ESP_LOGI(TAG,"%s internal=%u min_internal=%u largest=%u psram=%u",stage,
     unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)),
@@ -23,16 +23,18 @@ static void memory(const char *stage){
 void WakeNet::setup(){
   auto info=source_->get_audio_stream_info();
   if(!blob_ || (uintptr_t(blob_)&15) || blob_size_<512 || info.get_sample_rate()!=16000 || info.get_bits_per_sample()!=16 || info.get_channels()!=1){mark_failed();return;}
-  preference_=global_preferences->make_preference<uint8_t>(0x574E4133,true);
-  uint8_t mask=1;
+  preference_=global_preferences->make_preference<uint8_t>(0x574E4132,true);
+  uint8_t mask=3;
   if(!preference_.load(&mask)){
-    bool old=true;global_preferences->make_preference<bool>(0x574E4131,true).load(&old);mask=old?1:0;
+    uint8_t prior=0;
+    if(global_preferences->make_preference<uint8_t>(0x574E4133,true).load(&prior))mask=prior&3;
+    else {bool old=true;if(global_preferences->make_preference<bool>(0x574E4131,true).load(&old))mask=old?1:0;}
   }
-  active_mask_=(mask<=7 && __builtin_popcount(mask)<=2)?mask:1;
+  active_mask_=mask<=3?mask:3;
   ring_=ring_buffer::RingBuffer::create(16384);
   if(!ring_){mark_failed();return;}
   ota::get_global_ota_callback()->add_global_state_listener(this);
-  ESP_LOGI(TAG,"Boot reset=%d blob=%p size=%u aligned16=yes; three models, two HA assignments",int(esp_reset_reason()),blob_,unsigned(blob_size_));
+  ESP_LOGI(TAG,"Boot reset=%d blob=%p size=%u aligned16=yes; two WakeNet10 models, two HA assignments",int(esp_reset_reason()),blob_,unsigned(blob_size_));
   source_->add_data_callback([this](const std::vector<uint8_t>&data){
     if(!accepting_.load() || source_->is_muted())return;
     if((data.size()&1) || ring_->free()<data.size()){drops_++;return;}
@@ -42,7 +44,7 @@ void WakeNet::setup(){
 void WakeNet::set_active_words(const std::vector<std::string>&words){
   uint8_t mask=0;
   for(const auto&w:words){
-    bool found=false;for(size_t i=0;i<3;i++)if(w==WORD_IDS[i]){mask|=1U<<i;found=true;break;}
+    bool found=false;for(size_t i=0;i<2;i++)if(w==WORD_IDS[i]){mask|=1U<<i;found=true;break;}
     if(!found){ESP_LOGW(TAG,"Unknown wakeword selection rejected");return;}
   }
   if(__builtin_popcount(mask)>2){ESP_LOGW(TAG,"More than two HA assignments rejected");return;}
@@ -68,7 +70,7 @@ void WakeNet::loop(){
     accepting_=false;source_->stop();state_=STOPPED;
     if(failed_.load())status_momentary_error("afe_start",1000);
     const int id=detected_id_.exchange(0);
-    if(id>=1&&id<=3&&!cancelled_.load()&&word_enabled(id-1)&&!source_->is_muted()&&can_listen_())detected_trigger_.trigger(PHRASES[id-1]);
+    if(id>=1&&id<=2&&!cancelled_.load()&&word_enabled(id-1)&&!source_->is_muted()&&can_listen_())detected_trigger_.trigger(PHRASES[id-1]);
   }
 }
 void WakeNet::feeder(void*arg){
@@ -105,8 +107,8 @@ void WakeNet::worker(void*arg){
   if(heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<131072 || heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<65536 || heap_caps_get_free_size(MALLOC_CAP_SPIRAM)<4194304)goto cleanup;
   if(self->stop_requested_.load())goto cleanup;
   models=srmodel_load(self->blob_);
-  if(!models||models->num!=3)goto cleanup;
-  for(int i=0;i<3;i++)if(std::string(models->model_name[i])!=MODELS[i])goto cleanup;
+  if(!models||models->num!=2)goto cleanup;
+  for(int i=0;i<2;i++)if(std::string(models->model_name[i])!=MODELS[i])goto cleanup;
   cfg=afe_config_init("M",models,AFE_TYPE_SR,AFE_MODE_LOW_COST);if(!cfg)goto cleanup;
   // Existing ADF/DC/gain delivers one 16-kHz s16 microphone; no playback reference exists.
   cfg->aec_init=false;cfg->se_init=false;cfg->ns_init=false;cfg->vad_init=false;cfg->agc_init=false;
@@ -118,12 +120,14 @@ void WakeNet::worker(void*arg){
   if(!cfg || cfg->aec_init||cfg->se_init||cfg->ns_init||cfg->vad_init||cfg->agc_init||cfg->pcm_config.mic_num!=1||cfg->pcm_config.ref_num!=0||cfg->pcm_config.total_ch_num!=1||cfg->pcm_config.sample_rate!=16000)goto cleanup;
   iface=esp_afe_handle_from_config(cfg);if(!iface)goto cleanup;
   data=iface->create_from_config(cfg);if(!data)goto cleanup;
-  // Exactly two configured models plus ONE native registration. Never request a fourth slot.
-  if(iface->add_wakenet_model(data,models->model_name[2])!=3)goto cleanup;
-  memory("AFE three models loaded");
+  // Verify both native slots exist; a partially initialized AFE must not claim readiness.
+  // Fresh-model defaults are retained, not replaced with application cutoffs.
+  if(iface->reset_wakenet_threshold(data,1)!=1 || iface->reset_wakenet_threshold(data,2)!=1)goto cleanup;
+  // Both native configuration slots are used; no dynamic model registration.
+  memory("AFE two WakeNet10 models loaded");
   self->feed_samples_=iface->get_feed_chunksize(data);
   if(self->feed_samples_<=0||self->feed_samples_>2048||iface->get_feed_channel_num(data)!=1||iface->get_fetch_channel_num(data)!=1||iface->get_samp_rate(data)!=16000||iface->get_fetch_chunksize(data)<=0||iface->get_fetch_chunksize(data)>2048)goto cleanup;
-  ESP_LOGI(TAG,"AFE ready M/16000/s16 feed=%d fetch=%d; IDs 1=Alexa 2=Hallo ESP 3=Jarvis; WN only",self->feed_samples_,iface->get_fetch_chunksize(data));
+  ESP_LOGI(TAG,"AFE ready M/16000/s16 feed=%d fetch=%d; IDs 1=Alexa 2=Hallo ESP; WN only",self->feed_samples_,iface->get_fetch_chunksize(data));
   // Fail closed rather than consuming the VA/audio reserve. Runtime peaks remain to be measured.
   if(heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<98304||heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)<49152||heap_caps_get_free_size(MALLOC_CAP_SPIRAM)<2097152)goto cleanup;
   self->afe_iface_=iface;self->afe_data_=data;
@@ -139,7 +143,7 @@ void WakeNet::worker(void*arg){
     if(result->wakeup_state==WAKENET_DETECTED){
       const int id=result->wakenet_model_index;
       ESP_LOGI(TAG,"AFE detection model_id=%d word_index=%d",id,result->wake_word_index);
-      if(id<1||id>3||result->wake_word_index!=1){self->failed_=true;break;}
+      if(id<1||id>2||result->wake_word_index!=1){self->failed_=true;break;}
       self->detections_++;
       if(self->word_enabled(id-1)){self->detected_id_=id;self->stop_requested_=true;break;}
     }
@@ -157,6 +161,6 @@ cleanup:
   memory("AFE stopped");self->done_=true;vTaskSuspend(nullptr);
 }
 void WakeNet::dump_config(){
-  ESP_LOGCONFIG(TAG,"AFE WN10 Alexa + Hallo ESP + WN9 Jarvis; blob=%u mask=%u listening=%s PCM=%u feed=%u fetch=%u detect=%u drops=%u fetch_wait_max_us=%u",unsigned(blob_size_),unsigned(active_mask_.load()),YESNO(is_detecting_wake_word()),unsigned(audio_bytes_.load()),unsigned(feeds_.load()),unsigned(inferences_.load()),unsigned(detections_.load()),unsigned(drops_.load()),unsigned(inference_max_us_.load()));
+  ESP_LOGCONFIG(TAG,"AFE WakeNet10 Alexa + Hallo ESP; blob=%u mask=%u listening=%s PCM=%u feed=%u fetch=%u detect=%u drops=%u fetch_wait_max_us=%u",unsigned(blob_size_),unsigned(active_mask_.load()),YESNO(is_detecting_wake_word()),unsigned(audio_bytes_.load()),unsigned(feeds_.load()),unsigned(inferences_.load()),unsigned(detections_.load()),unsigned(drops_.load()),unsigned(inference_max_us_.load()));
 }
 }

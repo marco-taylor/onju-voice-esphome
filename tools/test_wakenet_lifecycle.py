@@ -17,12 +17,22 @@ common=r'''
 #include <cassert>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 #include <chrono>
 #include <map>
 #include <tuple>
 inline size_t heap_free=210000,heap_largest=140000,psram_free=8000000;
 inline int creates=0,destroys=0,loads=0,frees=0,detects=0,allocs=0;
 inline int input_rate=16000,input_channels=1,input_samples=128;
+inline constexpr int ESP_FAIL=-1;
+inline constexpr uint32_t portMAX_DELAY=UINT32_MAX;
+inline constexpr int pdTRUE=1;
+struct StaticSemaphore_t{std::mutex mutex;std::condition_variable cv;bool signaled=false;};
+using SemaphoreHandle_t=StaticSemaphore_t*;
+inline SemaphoreHandle_t xSemaphoreCreateBinaryStatic(StaticSemaphore_t*p){return p;}
+inline int xSemaphoreGive(SemaphoreHandle_t p){std::lock_guard<std::mutex>g(p->mutex);p->signaled=true;p->cv.notify_one();return pdTRUE;}
+inline int xSemaphoreTake(SemaphoreHandle_t p,uint32_t ticks){std::unique_lock<std::mutex>l(p->mutex);if(ticks==portMAX_DELAY)p->cv.wait(l,[&]{return p->signaled;});if(!p->signaled)return 0;p->signaled=false;return pdTRUE;}
+inline std::atomic<int> fetch_invocations{0},injected_fetch_error{0},feed_result{1};inline bool null_fetch=false;
 inline int detect_result=1;inline bool fail_create=false,can_deallocate=true;
 inline std::atomic<int> target_id{1},feed_count{0},fetch_count{0},adds{0};inline int add_result=3;inline bool bad_format=false,missing_model=false;
 inline std::function<void()> delay_hook;
@@ -53,7 +63,7 @@ inline std::map<uint32_t,uint8_t> stored;inline int saves=0;struct ESPPreference
 struct Pref{template<typename T>ESPPreferenceObject make_preference(uint32_t key,bool){return {key};}};inline Pref prefs;inline Pref*global_preferences=&prefs;
 template<typename...Ts>struct Trigger{int calls=0;std::string last;void trigger(Ts...v){calls++;last=std::get<0>(std::make_tuple(v...));}};
 template<typename...Ts>struct Action{virtual void play(const Ts &...)=0;};
-namespace microphone{struct Info{int get_sample_rate(){return 16000;}int get_bits_per_sample(){return 16;}int get_channels(){return 1;}};class MicrophoneSource{public:bool muted=false;int starts=0,stops=0;std::function<void(const std::vector<uint8_t>&)> cb;Info get_audio_stream_info(){return {};}bool is_muted(){return muted;}bool is_running(){return starts>stops;}void start(){starts++;}void stop(){stops++;}template<typename F>void add_data_callback(F f){cb=f;}};}
+namespace microphone{struct Info{int get_sample_rate(){return 16000;}int get_bits_per_sample(){return 16;}int get_channels(){return 1;}};class MicrophoneSource{public:bool muted=false,defer_running=false;int starts=0,stops=0;std::function<void(const std::vector<uint8_t>&)> cb;Info get_audio_stream_info(){return {};}bool is_muted(){return muted;}bool is_running(){return starts>stops&&!defer_running;}void start(){starts++;}void stop(){stops++;}template<typename F>void add_data_callback(F f){cb=f;}};}
 namespace ring_buffer{class RingBuffer{std::mutex m;std::vector<uint8_t>d;size_t cap;public:explicit RingBuffer(size_t n):cap(n){}static std::shared_ptr<RingBuffer>create(size_t n){return std::make_shared<RingBuffer>(n);}size_t available(){std::lock_guard<std::mutex>l(m);return d.size();}size_t free(){std::lock_guard<std::mutex>l(m);return cap-d.size();}void reset(){std::lock_guard<std::mutex>l(m);d.clear();}size_t write(void*p,size_t n){std::lock_guard<std::mutex>l(m);auto*b=(uint8_t*)p;d.insert(d.end(),b,b+n);return n;}size_t read(void*p,size_t n,int){std::lock_guard<std::mutex>l(m);n=std::min(n,d.size());memcpy(p,d.data(),n);d.erase(d.begin(),d.begin()+n);return n;}};}
 }
 struct srmodel_list_t{int num;char**model_name;};struct esp_afe_sr_data_t{};
@@ -65,8 +75,8 @@ inline esp_afe_sr_data_t md;
 inline esp_afe_sr_data_t*create_fake(afe_config_t*c){creates++;assert(c->wakenet_init&&!c->aec_init&&!c->vad_init&&!c->ns_init&&!c->agc_init&&!c->se_init);assert(!strcmp(c->wakenet_model_name,"wn10_alexa")&&!strcmp(c->wakenet_model_name_2,"wn10_de_halloesp"));return fail_create?nullptr:&md;}
 inline int add_fake(esp_afe_sr_data_t*,const char*n){assert(false && "No third-model registration allowed");return -1;}
 inline int samples_fake(esp_afe_sr_data_t*){return input_samples;}inline int channels_fake(esp_afe_sr_data_t*){return bad_format?2:1;}inline int rate_fake(esp_afe_sr_data_t*){return input_rate;}
-inline int feed_fake(esp_afe_sr_data_t*,int16_t*){feed_count++;return 1;}
-inline afe_fetch_result_t*fetch_fake(esp_afe_sr_data_t*,int){static afe_fetch_result_t r;std::this_thread::sleep_for(std::chrono::milliseconds(1));if(fetch_count>=feed_count)return nullptr;fetch_count++;r={0,target_id>0?WAKENET_DETECTED:0,target_id.load(),1};return &r;}
+inline int feed_fake(esp_afe_sr_data_t*,int16_t*){if(feed_result<=0)return feed_result.load();feed_count++;return 1;}
+inline afe_fetch_result_t*fetch_fake(esp_afe_sr_data_t*,int){static afe_fetch_result_t r;fetch_invocations++;if(null_fetch)return nullptr;if(int e=injected_fetch_error.exchange(0)){r={e,0,0,0};return &r;}std::this_thread::sleep_for(std::chrono::milliseconds(1));if(fetch_count>=feed_count){r={ESP_FAIL,0,0,0};return &r;}fetch_count++;r={0,target_id>0?WAKENET_DETECTED:0,target_id.load(),1};return &r;}
 inline void destroy_fake(esp_afe_sr_data_t*){destroys++;}
 inline int reset_fake(esp_afe_sr_data_t*,int id){assert(id==1||id==2);return missing_model&&id==2?-1:1;}
 inline esp_afe_sr_iface_t iface={create_fake,add_fake,samples_fake,channels_fake,channels_fake,rate_fake,samples_fake,feed_fake,fetch_fake,destroy_fake,reset_fake};
@@ -78,7 +88,7 @@ extern "C" inline void afe_config_free(afe_config_t*c){delete c;}
 extern "C" inline const esp_afe_sr_iface_t*esp_afe_handle_from_config(afe_config_t*){return &iface;}
 '''
 (inc/'common.h').write_text(common)
-for p in ["esphome/components/ota/ota_backend.h","esphome/core/component.h","esphome/core/automation.h","esphome/core/preferences.h","esphome/core/static_task.h","esphome/core/log.h","esphome/core/hal.h","esphome/components/microphone/microphone_source.h","esphome/components/ring_buffer/ring_buffer.h","esp_heap_caps.h","esp_timer.h","esp_system.h","esp_afe_sr_models.h","model_path.h"]:
+for p in ["esphome/components/ota/ota_backend.h","esphome/core/component.h","esphome/core/automation.h","esphome/core/preferences.h","esphome/core/static_task.h","esphome/core/log.h","esphome/core/hal.h","esphome/components/microphone/microphone_source.h","esphome/components/ring_buffer/ring_buffer.h","freertos/FreeRTOS.h","freertos/semphr.h","esp_err.h","esp_heap_caps.h","esp_timer.h","esp_system.h","esp_afe_sr_models.h","model_path.h"]:
  q=inc/p;q.parent.mkdir(parents=True,exist_ok=True);q.write_text('#pragma once\n#include "common.h"\n')
 code=r'''
 
@@ -93,6 +103,17 @@ alignas(16) uint8_t blob[1024]{};
 struct Rig{microphone::MicrophoneSource mic;bool allowed=true;WakeNet w;Rig(){feed_count=0;fetch_count=0;w.set_model_blob(blob,sizeof(blob));w.set_microphone_source(&mic);w.set_can_listen([&]{return allowed;});w.setup();}void pump(bool audio=true){w.loop();if(audio&&w.is_detecting_wake_word()){std::vector<uint8_t>d(256,1);mic.cb(d);}std::this_thread::sleep_for(std::chrono::milliseconds(2));}void finish(){for(int i=0;i<1000&&w.is_running();i++)pump();assert(!w.is_running());}~Rig(){if(w.is_running()){w.stop();finish();}}};
 int main(){
  stored.clear();
+ // Actual worker waits without fetch before audio, then runs after a real successful feed.
+ {Rig r;target_id=0;r.mic.defer_running=true;int before=fetch_invocations;r.w.start();for(int i=0;i<30;i++)r.pump(false);assert(r.w.ready_&&!r.mic.is_running()&&!r.w.failed_);assert(fetch_invocations==before&&r.w.get_received_audio_bytes()==0&&feed_count==0);r.mic.defer_running=false;for(int i=0;i<20;i++)r.pump(false);assert(r.mic.is_running()&&fetch_invocations==before);for(int i=0;i<30;i++)r.pump();assert(fetch_invocations>before&&feed_count>0&&r.w.get_successful_inferences()>0);r.w.stop();r.finish();
+  before=fetch_invocations;r.w.start();for(int i=0;i<30;i++)r.pump(false);assert(fetch_invocations==before);r.w.stop();r.finish();}
+ // Unsuccessful feed must not open the gate; feeder failure must wake cleanup.
+ {Rig r;target_id=0;feed_result=0;int before=fetch_invocations;r.w.start();for(int i=0;i<30;i++)r.pump();assert(r.w.get_received_audio_bytes()>0&&fetch_invocations==before&&!r.w.first_feed_done_);feed_result=1;for(int i=0;i<20;i++)r.pump();assert(fetch_invocations>before);r.w.stop();r.finish();}
+ {Rig r;feed_result=-2;r.w.start();r.finish();assert(r.w.failed_);feed_result=1;}
+ // Stop before the first feed must wake the blocked fetch worker and free resources.
+ {Rig r;r.w.start();for(int i=0;i<20;i++)r.pump(false);r.w.stop();r.finish();assert(!r.w.failed_);}
+ // Known native no-data status re-arms on new feed; unknown errors/null handle remain fatal.
+ {Rig r;target_id=0;r.w.start();injected_fetch_error=ESP_FAIL;for(int i=0;i<30;i++)r.pump();assert(!r.w.failed_&&r.w.get_successful_inferences()>0);for(int i=0;i<40;i++)r.pump(false);int before=fetch_invocations;for(int i=0;i<20;i++)r.pump(false);assert(fetch_invocations==before);for(int i=0;i<20;i++)r.pump();assert(fetch_invocations>before);r.w.stop();r.finish();}
+ for(int kind=0;kind<2;kind++){Rig r;target_id=0;r.w.start();if(kind==0)injected_fetch_error=-2;else null_fetch=true;r.finish();assert(r.w.failed_);null_fetch=false;}
  {Rig r;r.allowed=false;r.w.start();assert(!r.w.is_running());r.allowed=true;r.mic.muted=true;r.w.start();assert(!r.w.is_running());r.mic.muted=false;r.w.set_active_words({});r.w.start();assert(!r.w.is_running());}
  stored.clear();
  for(int id=1;id<=2;id++){Rig r;r.w.set_active_words({WakeNet::WORD_IDS[id-1]});int before=adds;target_id=id;r.w.start();r.finish();assert(adds==before);assert(r.w.detected_trigger_.calls==1&&r.w.get_successful_inferences()>0&&r.w.get_received_audio_bytes()>0);assert(r.mic.stops==1&&r.w.detected_trigger_.last==WakeNet::PHRASES[id-1]);}
@@ -110,7 +131,7 @@ int main(){
  stored.clear();stored[0x574E4133]=5;{Rig r;assert(r.w.word_enabled(0)&&!r.w.word_enabled(1));}
  stored.clear();{Rig r;assert(r.w.word_enabled(0)&&r.w.word_enabled(1));}
  assert(loads==frees&&creates-destroys==1&&adds==0); // Exactly one deliberately failed create.
- std::cout<<"PASS: actual AFE consumer lifecycle; two configured models, IDs 1/2, no dynamic registration, invalid/removed IDs rejected, PCM/feed/fetch, persistent mask migration, Mute/OFF, cancellation, low-memory failure, cleanup and OTA guard. Vendor AFE/DSP and FreeRTOS mocked; no target-runtime claim.\n";
+ std::cout<<"PASS: feed-before-fetch regression (delayed mic, no PCM, zero/failed feed, cancellation, restart, transient no-data, fatal/null fetch); actual AFE consumer lifecycle; two configured models, IDs 1/2, no dynamic registration, invalid/removed IDs rejected, PCM/feed/fetch, persistent mask migration, Mute/OFF, cancellation, low-memory failure, cleanup and OTA guard. Vendor AFE/DSP and FreeRTOS mocked; no target-runtime claim.\n";
 }
 '''
 (out/'test.cpp').write_text(code)

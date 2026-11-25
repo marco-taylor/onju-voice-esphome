@@ -6,6 +6,8 @@
 #include "esphome/components/ota/ota_backend.h"
 #include "esphome/components/microphone/microphone_source.h"
 #include "esphome/components/ring_buffer/ring_buffer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include <atomic>
 #include <functional>
 namespace esphome::onju_wakenet {
@@ -50,6 +52,9 @@ class WakeNet final : public Component, public ota::OTAGlobalStateListener {
   std::atomic<bool> ota_blocked_{false},stop_requested_{false},cancelled_{false},ready_{false},done_{false},accepting_{false},failed_{false},feed_done_{false};
   std::atomic<uint32_t> audio_bytes_{0},inferences_{0},drops_{0},feeds_{0},detections_{0},inference_total_us_{0},inference_max_us_{0};
   std::atomic<int> detected_id_{0};
+  StaticSemaphore_t feed_signal_storage_;
+  SemaphoreHandle_t feed_signal_{nullptr};
+  std::atomic<bool> first_feed_done_{false};
   // Only published before feeder creation, and cleared after its task is joined.
   const void *afe_iface_{nullptr};void *afe_data_{nullptr};int feed_samples_{0};
   Trigger<std::string> detected_trigger_;

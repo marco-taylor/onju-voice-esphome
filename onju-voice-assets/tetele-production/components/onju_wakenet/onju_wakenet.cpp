@@ -4,6 +4,7 @@
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "esp_system.h"
+#include "esp_err.h"
 #include <cmath>
 #include <algorithm>
 extern "C" {
@@ -35,6 +36,8 @@ void WakeNet::setup(){
   diag("READY_INITIAL_FALSE");
   auto info=source_->get_audio_stream_info();
   if(!blob_ || (uintptr_t(blob_)&15) || blob_size_<512 || info.get_sample_rate()!=16000 || info.get_bits_per_sample()!=16 || info.get_channels()!=1){diag("AFE_ERR_SETUP_FORMAT",0,true);mark_failed();return;}
+  feed_signal_=xSemaphoreCreateBinaryStatic(&feed_signal_storage_);
+  if(!feed_signal_){diag("AFE_ERR_FEED_SIGNAL",0,true);mark_failed();return;}
   preference_=global_preferences->make_preference<uint8_t>(0x574E4132,true);
   uint8_t mask=3;
   if(!preference_.load(&mask)){
@@ -71,10 +74,11 @@ void WakeNet::on_ota_global_state(ota::OTAState state,float progress,uint8_t err
 }
 void WakeNet::start(){
   if(ota_blocked_.load()||!is_ready()||is_failed()||state_!=STOPPED||!is_enabled()||source_->is_muted()||!can_listen_()){diag("AFE_ERR_START_GUARD",(ota_blocked_.load()?1:0)|(!is_ready()?2:0)|(is_failed()?4:0)|(state_!=STOPPED?8:0)|(!is_enabled()?16:0)|(source_->is_muted()?32:0),true);return;}
+  xSemaphoreTake(feed_signal_,0);first_feed_done_=false;
   stop_requested_=false;cancelled_=false;ready_=false;diag("READY_FALSE_NEW_START");done_=false;detected_id_=0;failed_=false;feed_done_=false;ring_->reset();state_=STARTING;
   if(!task_.create(worker,"wn_afe_fetch",8192,this,3,false)){diag("AFE_ERR_WORKER_TASK",0,true);state_=STOPPED;status_momentary_error("task_alloc",1000);}else diag("AFE_WORKER_TASK_CREATED",reinterpret_cast<intptr_t>(task_.get_handle()));
 }
-void WakeNet::stop(){cancelled_=true;accepting_=false;stop_requested_=true;if(state_!=STOPPED)state_=STOPPING;}
+void WakeNet::stop(){cancelled_=true;accepting_=false;stop_requested_=true;if(feed_signal_)xSemaphoreGive(feed_signal_);if(state_!=STOPPED)state_=STOPPING;}
 void WakeNet::loop(){
   if(state_==STOPPED)return;
   if(source_->is_running()&&!diag_mic_running_.exchange(true))diag("AFE_START_19_MIC_RUNNING");
@@ -106,6 +110,7 @@ void WakeNet::feeder(void*arg){
     if(result<0){self->diag("AFE_ERR_FEED_NATIVE",result,true);self->failed_=true;self->stop_requested_=true;break;}
     if(result==0){self->drops_++;continue;}
     if(self->feeds_.fetch_add(1)==0)self->diag("AFE_START_21_FIRST_AFE_FEED",result);
+    self->first_feed_done_=true;xSemaphoreGive(self->feed_signal_);
     // First second, then ten-second aggregates; no per-sample logging or capture.
     if(count>=(first_window?16000U:160000U)){
       const double dc=double(sum)/count,rms2=double(squares)/count;
@@ -115,11 +120,12 @@ void WakeNet::feeder(void*arg){
     }
   }
   if(frame)heap_caps_free(frame);
-  self->diag("AFE_FEED_TASK_EXIT",self->stop_requested_.load());self->feed_done_=true;vTaskSuspend(nullptr);
+  self->diag("AFE_FEED_TASK_EXIT",self->stop_requested_.load());self->feed_done_=true;xSemaphoreGive(self->feed_signal_);vTaskSuspend(nullptr);
 }
 void WakeNet::worker(void*arg){
   auto*self=static_cast<WakeNet*>(arg);srmodel_list_t*models=nullptr;afe_config_t*cfg=nullptr;
   const esp_afe_sr_iface_t*iface=nullptr;esp_afe_sr_data_t*data=nullptr;bool feeder_created=false;
+  bool wait_for_feed=true,fetch_enabled=false,no_data_reported=false;
   self->diag("AFE_START_00_ENTRY",0,true);
   self->diag("AFE_START_01_MODEL_BLOB_FOUND",reinterpret_cast<intptr_t>(self->blob_));
   memory("AFE init begin");
@@ -164,8 +170,23 @@ void WakeNet::worker(void*arg){
   self->diag("AFE_START_15_FEED_TASK_CREATED",reinterpret_cast<intptr_t>(self->feed_task_.get_handle()),true);
   feeder_created=true;self->ready_=true;self->diag("AFE_START_16_READY_SET_TRUE",0,true);
   while(!self->stop_requested_.load()){
+    // The pinned one-mic AFE reports ESP_FAIL for an incomplete ring-buffer read.
+    // Wait for actual successful feed, not elapsed startup time. Stop/feeder exit
+    // also wake this semaphore, so cancellation never depends on more audio.
+    if(wait_for_feed){
+      xSemaphoreTake(self->feed_signal_,portMAX_DELAY);
+      if(self->stop_requested_.load())break;
+      if(!self->first_feed_done_.load())continue;
+      wait_for_feed=false;
+      if(!fetch_enabled){self->diag("AFE_FETCH_ENABLED");fetch_enabled=true;}
+    }
+    xSemaphoreTake(self->feed_signal_,0); // Discard stale feed notification before this read.
     const int64_t begin=esp_timer_get_time();auto*result=iface->fetch_with_delay(data,pdMS_TO_TICKS(100));
-    if(!result)continue;
+    if(!result){self->diag("AFE_ERR_FETCH_HANDLE",0,true);self->failed_=true;break;}
+    if(result->ret_value==ESP_FAIL){
+      if(!no_data_reported){self->diag("AFE_FETCH_NO_DATA",result->ret_value);no_data_reported=true;}
+      wait_for_feed=true;continue; // Re-arm on a new successful feed; never poll empty input.
+    }
     if(result->ret_value<0){self->diag("AFE_ERR_FETCH_NATIVE",result->ret_value,true);self->failed_=true;break;}
     const uint32_t elapsed=esp_timer_get_time()-begin;self->inference_total_us_+=elapsed;
     if(elapsed>self->inference_max_us_.load())self->inference_max_us_=elapsed;
@@ -183,7 +204,7 @@ cleanup:
   self->accepting_=false;self->stop_requested_=true;
   // Keep fetch draining until feed exits; feed can block on a full vendor output ring.
   // No task is deleted while it can access AFE/model memory.
-  if(feeder_created){while(!self->feed_done_.load()){if(iface&&data)iface->fetch_with_delay(data,pdMS_TO_TICKS(100));vTaskDelay(1);}while(!self->feed_task_.deallocate())vTaskDelay(1);}
+  if(feeder_created){while(!self->feed_done_.load()){if(iface&&data&&self->first_feed_done_.load())iface->fetch_with_delay(data,pdMS_TO_TICKS(100));vTaskDelay(1);}while(!self->feed_task_.deallocate())vTaskDelay(1);}
   self->afe_data_=nullptr;self->afe_iface_=nullptr;
   if(!self->ready_.load()&&!self->cancelled_.load()){self->failed_=true;ESP_LOGW(TAG,"AFE start failed; no listening claim");}
   if(data&&iface)iface->destroy(data);

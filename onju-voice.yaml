@@ -893,6 +893,10 @@ script:
           }
 
 switch:
+  - platform: onju_wakenet
+    name: Noise Suppression
+    id: noise_suppression
+    onju_wakenet_id: wakenet
   - platform: template
     id: software_mute
     name: Mute

@@ -33,7 +33,7 @@ inline SemaphoreHandle_t xSemaphoreCreateBinaryStatic(StaticSemaphore_t*p){retur
 inline int xSemaphoreGive(SemaphoreHandle_t p){std::lock_guard<std::mutex>g(p->mutex);p->signaled=true;p->cv.notify_one();return pdTRUE;}
 inline int xSemaphoreTake(SemaphoreHandle_t p,uint32_t ticks){std::unique_lock<std::mutex>l(p->mutex);if(ticks==portMAX_DELAY)p->cv.wait(l,[&]{return p->signaled;});if(!p->signaled)return 0;p->signaled=false;return pdTRUE;}
 inline std::atomic<int> fetch_invocations{0},injected_fetch_error{0},feed_result{1};inline bool null_fetch=false;
-inline int ns_enable_result=1;
+inline int ns_enable_result=1,ns_disable_result=0,ns_enables=0,ns_disables=0;
 inline int detect_result=1;inline bool fail_create=false,can_deallocate=true;
 inline std::atomic<int> target_id{1},feed_count{0},fetch_count{0},adds{0};inline int add_result=3;inline bool bad_format=false,missing_model=false;
 inline std::function<void()> delay_hook;
@@ -57,6 +57,7 @@ inline void vTaskSuspend(void*){}
 #define YESNO(x) ((x)?"YES":"NO")
 namespace esphome {
 namespace ota {enum OTAState {OTA_STARTED,OTA_ERROR};class OTAComponent{};struct OTAGlobalStateListener{virtual void on_ota_global_state(OTAState,float,uint8_t,OTAComponent*)=0;};struct Callback{void add_global_state_listener(OTAGlobalStateListener*){}};inline Callback cb;inline Callback*get_global_ota_callback(){return &cb;}}
+namespace switch_ {class Switch{public:bool state=false,has_state=false;int publications=0;void publish_state(bool value){state=value;has_state=true;publications++;}void control(bool value){write_state(value);}protected:virtual void write_state(bool)=0;};}
 namespace setup_priority{constexpr float AFTER_WIFI=200;}
 class Component{public:bool ready=true,failed=false;virtual void setup(){}virtual void loop(){}virtual void dump_config(){}virtual float get_setup_priority()const{return 0;}bool is_ready()const{return ready;}bool is_failed()const{return failed;}void mark_failed(){failed=true;}void status_momentary_error(const char*,int){}};
 class StaticTask{std::thread t;public:void* get_handle(){return this;}bool create(void(*f)(void*),const char*,int,void*p,int,bool){assert(!t.joinable());t=std::thread(f,p);return true;}bool deallocate(){if(!can_deallocate)return false;if(t.joinable())t.join();return true;}};
@@ -71,7 +72,7 @@ struct srmodel_list_t{int num;char**model_name;};struct esp_afe_sr_data_t{};
 struct afe_config_t{bool aec_init,se_init,ns_init,vad_init,agc_init,wakenet_init;char*ns_model_name;int afe_ns_mode;char*wakenet_model_name;char*wakenet_model_name_2;int wakenet_mode,memory_alloc_mode;float afe_linear_gain;bool fixed_first_channel,fixed_output_channel,output_playback_channel;int afe_ringbuf_size;bool debug_init;struct{int mic_num,ref_num,total_ch_num,sample_rate;}pcm_config;};
 enum{AFE_NS_MODE_NET,AFE_TYPE_SR,AFE_MODE_LOW_COST,DET_MODE_90,AFE_MEMORY_ALLOC_MORE_PSRAM,WAKENET_DETECTED};
 struct afe_fetch_result_t{int ret_value,wakeup_state,wakenet_model_index,wake_word_index;};
-struct esp_afe_sr_iface_t{esp_afe_sr_data_t*(*create_from_config)(afe_config_t*);int(*add_wakenet_model)(esp_afe_sr_data_t*,const char*);int(*get_feed_chunksize)(esp_afe_sr_data_t*);int(*get_feed_channel_num)(esp_afe_sr_data_t*);int(*get_fetch_channel_num)(esp_afe_sr_data_t*);int(*get_samp_rate)(esp_afe_sr_data_t*);int(*get_fetch_chunksize)(esp_afe_sr_data_t*);int(*feed)(esp_afe_sr_data_t*,int16_t*);afe_fetch_result_t*(*fetch_with_delay)(esp_afe_sr_data_t*,int);void(*destroy)(esp_afe_sr_data_t*);int(*reset_wakenet_threshold)(esp_afe_sr_data_t*,int);int(*enable_ns)(esp_afe_sr_data_t*);};
+struct esp_afe_sr_iface_t{esp_afe_sr_data_t*(*create_from_config)(afe_config_t*);int(*add_wakenet_model)(esp_afe_sr_data_t*,const char*);int(*get_feed_chunksize)(esp_afe_sr_data_t*);int(*get_feed_channel_num)(esp_afe_sr_data_t*);int(*get_fetch_channel_num)(esp_afe_sr_data_t*);int(*get_samp_rate)(esp_afe_sr_data_t*);int(*get_fetch_chunksize)(esp_afe_sr_data_t*);int(*feed)(esp_afe_sr_data_t*,int16_t*);afe_fetch_result_t*(*fetch_with_delay)(esp_afe_sr_data_t*,int);void(*destroy)(esp_afe_sr_data_t*);int(*reset_wakenet_threshold)(esp_afe_sr_data_t*,int);int(*enable_ns)(esp_afe_sr_data_t*);int(*disable_ns)(esp_afe_sr_data_t*);};
 inline esp_afe_sr_data_t md;
 inline esp_afe_sr_data_t*create_fake(afe_config_t*c){creates++;assert(c->wakenet_init&&!c->aec_init&&!c->vad_init&&c->ns_init&&c->afe_ns_mode==AFE_NS_MODE_NET&&!strcmp(c->ns_model_name,"nsnet2")&&!c->agc_init&&!c->se_init);assert(!strcmp(c->wakenet_model_name,"wn10_alexa")&&!strcmp(c->wakenet_model_name_2,"wn10_de_halloesp"));return fail_create?nullptr:&md;}
 inline int add_fake(esp_afe_sr_data_t*,const char*n){assert(false && "No third-model registration allowed");return -1;}
@@ -80,7 +81,7 @@ inline int feed_fake(esp_afe_sr_data_t*,int16_t*){if(feed_result<=0)return feed_
 inline afe_fetch_result_t*fetch_fake(esp_afe_sr_data_t*,int){static afe_fetch_result_t r;fetch_invocations++;if(null_fetch)return nullptr;if(int e=injected_fetch_error.exchange(0)){r={e,0,0,0};return &r;}std::this_thread::sleep_for(std::chrono::milliseconds(1));if(fetch_count>=feed_count){r={ESP_FAIL,0,0,0};return &r;}fetch_count++;r={0,target_id>0?WAKENET_DETECTED:0,target_id.load(),1};return &r;}
 inline void destroy_fake(esp_afe_sr_data_t*){destroys++;}
 inline int reset_fake(esp_afe_sr_data_t*,int id){assert(id==1||id==2);return missing_model&&id==2?-1:1;}
-inline esp_afe_sr_iface_t iface={create_fake,add_fake,samples_fake,channels_fake,channels_fake,rate_fake,samples_fake,feed_fake,fetch_fake,destroy_fake,reset_fake,[](esp_afe_sr_data_t*){return ns_enable_result;}};
+inline esp_afe_sr_iface_t iface={create_fake,add_fake,samples_fake,channels_fake,channels_fake,rate_fake,samples_fake,feed_fake,fetch_fake,destroy_fake,reset_fake,[](esp_afe_sr_data_t*){ns_enables++;return ns_enable_result;},[](esp_afe_sr_data_t*){ns_disables++;return ns_disable_result;}};
 extern "C" inline srmodel_list_t*srmodel_load(const void*){loads++;static char a[]="wn10_alexa",b[]="wn10_de_halloesp",c[]="nsnet2";static char*n[]={a,b,c};static srmodel_list_t l{3,n};return &l;}
 extern "C" inline void esp_srmodel_deinit(srmodel_list_t*){frees++;}
 extern "C" inline afe_config_t*afe_config_init(const char*f,srmodel_list_t*m,int,int){assert(!strcmp(f,"M")&&m->num==3);return new afe_config_t{};}
@@ -89,7 +90,7 @@ extern "C" inline void afe_config_free(afe_config_t*c){delete c;}
 extern "C" inline const esp_afe_sr_iface_t*esp_afe_handle_from_config(afe_config_t*){return &iface;}
 '''
 (inc/'common.h').write_text(common)
-for p in ["esphome/components/ota/ota_backend.h","esphome/core/component.h","esphome/core/automation.h","esphome/core/preferences.h","esphome/core/static_task.h","esphome/core/log.h","esphome/core/hal.h","esphome/components/microphone/microphone_source.h","esphome/components/ring_buffer/ring_buffer.h","freertos/FreeRTOS.h","freertos/semphr.h","esp_err.h","esp_heap_caps.h","esp_timer.h","esp_system.h","esp_afe_sr_models.h","model_path.h"]:
+for p in ["esphome/components/switch/switch.h","esphome/components/ota/ota_backend.h","esphome/core/component.h","esphome/core/automation.h","esphome/core/preferences.h","esphome/core/static_task.h","esphome/core/log.h","esphome/core/hal.h","esphome/components/microphone/microphone_source.h","esphome/components/ring_buffer/ring_buffer.h","freertos/FreeRTOS.h","freertos/semphr.h","esp_err.h","esp_heap_caps.h","esp_timer.h","esp_system.h","esp_afe_sr_models.h","model_path.h"]:
  q=inc/p;q.parent.mkdir(parents=True,exist_ok=True);q.write_text('#pragma once\n#include "common.h"\n')
 code=r'''
 
@@ -103,6 +104,24 @@ using namespace esphome;using namespace esphome::onju_wakenet;
 alignas(16) uint8_t blob[1024]{};
 struct Rig{microphone::MicrophoneSource mic;bool allowed=true;WakeNet w;Rig(){feed_count=0;fetch_count=0;w.set_model_blob(blob,sizeof(blob));w.set_microphone_source(&mic);w.set_can_listen([&]{return allowed;});w.setup();}void pump(bool audio=true){w.loop();if(audio&&w.is_detecting_wake_word()){std::vector<uint8_t>d(256,1);mic.cb(d);}std::this_thread::sleep_for(std::chrono::milliseconds(2));}void finish(){for(int i=0;i<1000&&w.is_running();i++)pump();assert(!w.is_running());}~Rig(){if(w.is_running()){w.stop();finish();}}};
 int main(){
+ stored.clear();
+
+ // NS is default ON, acknowledged only after native init; switching happens at feed boundaries.
+ {Rig r;NoiseSuppressionSwitch sw;sw.set_parent(&r.w);assert(r.w.ns_requested_&&!sw.has_state);target_id=0;r.w.start();for(int i=0;i<30;i++)r.pump();assert(sw.has_state&&sw.state&&r.w.ns_applied_==1);
+  int c=creates,starts=r.mic.starts,writes=saves;
+  for(bool on:{false,true,false,true}){sw.control(on);for(int i=0;i<30;i++)r.pump();assert(sw.state==on&&r.w.ns_applied_==int(on)&&r.mic.is_running()&&!r.w.failed_);assert(creates==c&&r.mic.starts==starts);}
+  assert(saves==writes+4);writes=saves;int calls=ns_enables+ns_disables;sw.control(true);for(int i=0;i<10;i++)r.pump();assert(saves==writes&&ns_enables+ns_disables==calls);
+  ns_disable_result=-1;sw.control(false);for(int i=0;i<30;i++)r.pump();int failures=ns_disables;assert(sw.state&&r.w.ns_applied_==1&&!r.w.failed_);for(int i=0;i<30;i++)r.pump();assert(ns_disables==failures);ns_disable_result=0;int before_retry_writes=saves;sw.control(false);for(int i=0;i<30;i++)r.pump();assert(!sw.state&&saves==before_retry_writes);
+  sw.control(true);for(int i=0;i<10;i++)r.pump();sw.control(false);for(int i=0;i<30;i++)r.pump();assert(!sw.state);r.w.stop();r.finish();}
+ // Simulated preference reload: OFF then ON, including stopped/muted requests and recovery.
+ for(bool on:{false,true}){
+  {Rig r;assert(!r.w.ns_requested_);if(on)r.w.set_noise_suppression(true);}
+  {Rig r;NoiseSuppressionSwitch sw;sw.set_parent(&r.w);assert(r.w.ns_requested_.load()==on);target_id=0;r.w.start();for(int i=0;i<30;i++)r.pump();assert(sw.has_state&&sw.state==on&&r.w.ns_applied_==int(on));
+   r.mic.muted=true;r.w.loop();r.finish();int starts=r.mic.starts;r.w.set_noise_suppression(!on);r.w.start();assert(!r.w.is_running()&&r.mic.starts==starts);r.w.set_noise_suppression(on);r.mic.muted=false;
+   r.allowed=false;r.w.start();assert(!r.w.is_running());r.allowed=true;r.w.start();for(int i=0;i<30;i++)r.pump();assert(r.w.is_detecting_wake_word()&&r.w.ns_applied_==int(on));r.w.stop();r.finish();
+   // A VA/TTS pause uses the same stop/start lifecycle; mode survives each new AFE.
+   r.w.start();for(int i=0;i<30;i++)r.pump();assert(r.w.ns_applied_==int(on)&&r.w.is_detecting_wake_word());r.w.stop();r.finish();}
+ }
  stored.clear();
  // Native NS enable failure is fail-closed before microphone start.
  {Rig r;ns_enable_result=-1;r.w.start();r.finish();assert(r.w.failed_&&r.mic.starts==0&&r.w.get_received_audio_bytes()==0);ns_enable_result=1;}

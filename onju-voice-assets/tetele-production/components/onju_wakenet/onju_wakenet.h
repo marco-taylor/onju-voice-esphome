@@ -6,6 +6,7 @@
 #include "esphome/components/ota/ota_backend.h"
 #include "esphome/components/microphone/microphone_source.h"
 #include "esphome/components/ring_buffer/ring_buffer.h"
+#include "esphome/components/switch/switch.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include <atomic>
@@ -28,6 +29,8 @@ class WakeNet final : public Component, public ota::OTAGlobalStateListener {
   void set_can_listen(std::function<bool()> fn){can_listen_=std::move(fn);}
   void set_on_enabled(std::function<void()> fn){on_enabled_=std::move(fn);}
   void set_active_words(const std::vector<std::string> &words);
+  void set_noise_suppression(bool enabled);
+  void set_noise_suppression_switch(switch_::Switch *value){ns_switch_=value;}
   void set_enabled(bool enabled){set_active_words(enabled?std::vector<std::string>{"alexa"}:std::vector<std::string>{});}
   bool word_enabled(size_t index)const{return index<2 && (active_mask_.load()&(1U<<index));}
   bool is_enabled()const{return active_mask_.load()!=0;}
@@ -49,6 +52,11 @@ class WakeNet final : public Component, public ota::OTAGlobalStateListener {
   std::function<bool()> can_listen_;std::function<void()> on_enabled_;
   std::shared_ptr<ring_buffer::RingBuffer> ring_;StaticTask task_,feed_task_;
   ESPPreferenceObject preference_;std::atomic<uint8_t> active_mask_{1};
+  ESPPreferenceObject ns_preference_;
+  switch_::Switch *ns_switch_{nullptr};
+  std::atomic<bool> ns_requested_{true},ns_ack_pending_{false};
+  std::atomic<int> ns_applied_{-1};
+  std::atomic<uint32_t> ns_request_version_{0};
   std::atomic<bool> ota_blocked_{false},stop_requested_{false},cancelled_{false},ready_{false},done_{false},accepting_{false},failed_{false},feed_done_{false};
   std::atomic<uint32_t> audio_bytes_{0},inferences_{0},drops_{0},feeds_{0},detections_{0},inference_total_us_{0},inference_max_us_{0};
   std::atomic<int> detected_id_{0};
@@ -58,6 +66,13 @@ class WakeNet final : public Component, public ota::OTAGlobalStateListener {
   // Only published before feeder creation, and cleared after its task is joined.
   const void *afe_iface_{nullptr};void *afe_data_{nullptr};int feed_samples_{0};
   Trigger<std::string> detected_trigger_;
+};
+class NoiseSuppressionSwitch final : public switch_::Switch {
+ public:
+  void set_parent(WakeNet *parent){parent_=parent;parent_->set_noise_suppression_switch(this);}
+ protected:
+  void write_state(bool value) override {parent_->set_noise_suppression(value);}
+  WakeNet *parent_{nullptr};
 };
 template<typename... Ts>class StartAction:public Action<Ts...>{public:explicit StartAction(WakeNet*p):parent_(p){}void play(const Ts &...x)override{parent_->start();}protected:WakeNet*parent_;};
 template<typename... Ts>class StopAction:public Action<Ts...>{public:explicit StopAction(WakeNet*p):parent_(p){}void play(const Ts &...x)override{parent_->stop();}protected:WakeNet*parent_;};

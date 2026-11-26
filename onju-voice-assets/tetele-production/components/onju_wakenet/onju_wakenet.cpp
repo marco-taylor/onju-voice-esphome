@@ -46,6 +46,10 @@ void WakeNet::setup(){
     else {bool old=true;if(global_preferences->make_preference<bool>(0x574E4131,true).load(&old))mask=old?1:0;}
   }
   active_mask_=mask<=3?mask:3;
+  ns_preference_=global_preferences->make_preference<uint8_t>(0x4E534E32,true);
+  uint8_t ns=1;
+  if(ns_preference_.load(&ns)&&ns<=1)ns_requested_=ns;
+  ESP_LOGI(TAG,"NS restored requested=%s; publication waits for native confirmation",YESNO(ns_requested_.load()));
   ring_=ring_buffer::RingBuffer::create(16384);
   if(!ring_){mark_failed();return;}
   ota::get_global_ota_callback()->add_global_state_listener(this);
@@ -56,6 +60,16 @@ void WakeNet::setup(){
     if((data.size()&1) || ring_->free()<data.size()){drops_++;return;}
     audio_bytes_+=ring_->write(const_cast<uint8_t*>(data.data()),data.size());
   });
+}
+void WakeNet::set_noise_suppression(bool enabled){
+  const bool changed=ns_requested_.exchange(enabled)!=enabled;
+  if(!changed&&ns_applied_.load()==int(enabled))return;
+  if(changed){
+    const uint8_t stored=enabled?1:0;
+    ns_preference_.save(&stored); // Existing 60-second Preferences batching; changes only.
+  }
+  ns_request_version_.fetch_add(1);
+  ESP_LOGI(TAG,"NS requested=%s; applies at next feed or AFE initialization",YESNO(enabled));
 }
 void WakeNet::set_active_words(const std::vector<std::string>&words){
   uint8_t mask=0;
@@ -80,6 +94,8 @@ void WakeNet::start(){
 }
 void WakeNet::stop(){cancelled_=true;accepting_=false;stop_requested_=true;if(feed_signal_)xSemaphoreGive(feed_signal_);if(state_!=STOPPED)state_=STOPPING;}
 void WakeNet::loop(){
+  // ESPHome entities are published only on the main loop, after native acknowledgement.
+  if(ns_ack_pending_.exchange(false)&&ns_switch_&&ns_applied_.load()>=0)ns_switch_->publish_state(ns_applied_.load()==1);
   if(state_==STOPPED)return;
   if(source_->is_running()&&!diag_mic_running_.exchange(true))diag("AFE_START_19_MIC_RUNNING");
   if(source_->is_running()&&feeds_.load()&&inferences_.load()&&!diag_operational_.exchange(true))diag("AFE_START_23_LISTENING_OPERATIONAL");
@@ -102,9 +118,24 @@ void WakeNet::feeder(void*arg){
   self->diag("AFE_FEED_BUFFER_RESULT",reinterpret_cast<intptr_t>(frame),true);
   if(!frame){self->diag("AFE_ERR_FEED_BUFFER_ALLOC",0,true);self->failed_=true;self->stop_requested_=true;}
   uint64_t squares=0;int64_t sum=0;uint32_t count=0,clipped=0;int peak=0;bool first_window=true;
+  uint32_t ns_last_attempt=UINT32_MAX;
   while(frame&&!self->stop_requested_.load()){
     if(self->ring_->available()<bytes){vTaskDelay(pdMS_TO_TICKS(2));continue;}
     if(self->ring_->read(frame,bytes,0)!=bytes){self->drops_++;continue;}
+    // Only this task controls NS once feed starts. No concurrent feed/control or destroy.
+    // Native disable returns 0 (not 1); neither operation frees the NS model/state.
+    const uint32_t ns_version=self->ns_request_version_.load();
+    if(ns_version!=ns_last_attempt){
+      ns_last_attempt=ns_version;
+      const bool wanted=self->ns_requested_.load();
+      if(self->ns_applied_.load()!=int(wanted)){
+        const int result=wanted?iface->enable_ns(data):iface->disable_ns(data);
+        if(result==int(wanted))self->ns_applied_=result;
+        ESP_LOGI(TAG,"NS runtime requested=%s native=%d applied=%d before_feed=%u",YESNO(wanted),result,self->ns_applied_.load(),unsigned(self->feeds_.load()));
+        if(result!=int(wanted))ESP_LOGW(TAG,"NS runtime control failed; retaining confirmed state");
+        self->ns_ack_pending_=true;
+      }
+    }
     for(int i=0;i<self->feed_samples_;i++){const int x=frame[i];sum+=x;squares+=int64_t(x)*x;peak=std::max(peak,std::abs(x));clipped+=(x>=32767||x<=-32768);count++;}
     const int result=iface->feed(data,frame);
     if(result<0){self->diag("AFE_ERR_FEED_NATIVE",result,true);self->failed_=true;self->stop_requested_=true;break;}
@@ -157,7 +188,12 @@ void WakeNet::worker(void*arg){
   // Verify both native slots exist; a partially initialized AFE must not claim readiness.
   // Fresh-model defaults are retained, not replaced with application cutoffs.
   if(self->diag_result("AFE_NATIVE_SLOT_1",iface->reset_wakenet_threshold(data,1))!=1 || self->diag_result("AFE_NATIVE_SLOT_2",iface->reset_wakenet_threshold(data,2))!=1){self->diag("AFE_ERR_MODEL_SLOTS",0,true);goto cleanup;}
-  if(self->diag_result("AFE_NS_ENABLED_NATIVE",iface->enable_ns(data))!=1){self->diag("AFE_ERR_NS_ENABLE",0,true);goto cleanup;}
+  {
+    const bool wanted=self->ns_requested_.load();
+    const int result=wanted?iface->enable_ns(data):iface->disable_ns(data);
+    if(self->diag_result("AFE_NS_APPLIED_NATIVE",result)!=int(wanted)){self->diag("AFE_ERR_NS_CONTROL",result,true);goto cleanup;}
+    self->ns_applied_=result;self->ns_ack_pending_=true;
+  }
   // Both native configuration slots are used; no dynamic model registration.
   memory("AFE two WakeNet10 models loaded");
   self->feed_samples_=iface->get_feed_chunksize(data);
@@ -217,6 +253,7 @@ cleanup:
 }
 void WakeNet::dump_config(){
   dump_diag();
+  ESP_LOGCONFIG(TAG,"NS requested=%s confirmed=%d; runtime bypass retains allocations",YESNO(ns_requested_.load()),ns_applied_.load());
   ESP_LOGCONFIG(TAG,"AFE WakeNet10 Alexa + Hallo ESP + NSNet2; blob=%u mask=%u listening=%s PCM=%u feed=%u fetch=%u detect=%u drops=%u fetch_wait_max_us=%u",unsigned(blob_size_),unsigned(active_mask_.load()),YESNO(is_detecting_wake_word()),unsigned(audio_bytes_.load()),unsigned(feeds_.load()),unsigned(inferences_.load()),unsigned(detections_.load()),unsigned(drops_.load()),unsigned(inference_max_us_.load()));
 }
 }
